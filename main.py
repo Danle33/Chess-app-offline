@@ -21,6 +21,7 @@ for i in range(8):
 WHITE = (255, 255, 255)
 BLACKY = (30, 30, 30)
 DARK_GREEN_TRANSPARENT = (0, 50, 0, 50)
+DARK_GREEN_TRANSPARENT1 = (0, 50, 0, 25)
 
 #globals
 minutes = 0.25
@@ -40,11 +41,17 @@ rect_dot = image_dot.get_rect()
 
 # renders string s with center position at (x, y) and given font size
 def render_text(s, x, y, font_size):
-    font = pygame.font.Font("Assets/shared/fonts\jetBrainsMono/ttf/JetBrainsMono-Regular.ttf", font_size)
+    font = pygame.font.Font("Assets/shared/fonts\\jetBrainsMono/ttf/JetBrainsMono-Regular.ttf", font_size)
     text_surface = font.render(s, True, WHITE)
     rect_text = text_surface.get_rect()
     rect_text.center = (x,y)
     screen.blit(text_surface, rect_text)
+
+# deletes instance of a captured piece on position (row, column)
+def delete_captured_piece(row, column):
+    for piece in pieces_opponent:
+        if piece.row == row and piece.column == column:
+            piece.kill()
 
 # calculates new dimensions based on initial ones which are 450*975
 # handles rescalling while keeping aspect ratio
@@ -153,25 +160,79 @@ class Piece(pygame.sprite.Sprite):
         column = (x -TABLE_X) / SQUARE_SIZE
         return (int(row), int(column))
     
-    # initializes pairs of (row, column) coordinates of available squares
+    # initializes pairs of (row, column) coordinates of available squares after every move
     def update_available_squares(self):
         self.available_squares = []
 
-        if self.name == 'P':
-            # square in front of the pawn
-            if TABLE_MATRIX[self.row - 1][self.column] == '.':
-                self.available_squares.append((self.row - 1, self.column))
+        if self.name == 'P' or self.name == 'p':
+            # pawns only go forward
+            next_row = self.row - 1
+            if next_row >= 0:
+                # square in front of the pawn
+                if TABLE_MATRIX[self.row - 1][self.column] not in names_player:
+                    self.available_squares.append((self.row - 1, self.column))
 
-            # two squares from starting position
-            if self.row == 6 and TABLE_MATRIX[self.row - 2][self.column] == '.':
-                self.available_squares.append((self.row - 2, self.column))
-           
+                # two squares from starting position
+                if self.row == 6 and TABLE_MATRIX[self.row - 2][self.column] not in names_player:
+                    self.available_squares.append((self.row - 2, self.column))
+                
+                # capturing opponents piece, one square diagonally, with bound check
+                if self.column - 1 >= 0:
+                    capture_left = TABLE_MATRIX[self.row - 1][self.column - 1]
+                    if capture_left not in names_player and capture_left not in names_player and capture_left != '.':
+                        self.available_squares.append((self.row - 1, self.column - 1))
+                if self.column + 1 < 8:
+                    capture_right = TABLE_MATRIX[self.row - 1][self.column + 1]
+                    if capture_right not in names_player and capture_right not in names_player and capture_right != '.':
+                        self.available_squares.append((self.row - 1, self.column + 1))
+
+        if self.name == 'N' or self.name == 'n':
+            # x, y offsets where knight can possibly jump to
+            jumping_offsets = [(1, -2), (2, -1), (2, 1), (1, 2), (-1, 2), (-2, 1), (-2, -1), (-1, -2)]
+
+            for (offset_x, offset_y) in jumping_offsets:
+                try_row = self.row + offset_y
+                try_column = self.column + offset_x
+                # checking bounds and availability for every jumping square
+                if 0 <= try_row <= 7 and 0 <= try_column <= 7 and TABLE_MATRIX[try_row][try_column] not in names_player:
+                    self.available_squares.append((try_row, try_column))
+        
+        if self.name == "B" or self.name == 'b':
+            # above bishop
+            for curr_row in range(self.row - 1, -1, -1):
+                curr_column_left = self.column - abs(self.row - curr_row)
+                curr_column_right = self.column + abs(self.row - curr_row)
+
+                if curr_column_left >= 0 and TABLE_MATRIX[curr_row][curr_column_left] in names_player:
+                    curr_column_left = -1
+                if curr_column_right <= 7 and TABLE_MATRIX[curr_row][curr_column_right] in names_player:
+                    curr_column_right = 8
+
+                if curr_column_left >= 0 and TABLE_MATRIX[curr_row][curr_column_left] not in names_player:
+                    self.available_squares.append((curr_row, curr_column_left))
+                if curr_column_right <= 7 and TABLE_MATRIX[curr_row][curr_column_right] not in names_player:
+                    self.available_squares.append((curr_row, curr_column_right))
+            # below bishop
+            for curr_row in range(self.row + 1, 8, 1):
+                curr_column_left = self.column - abs(self.row - curr_row)
+                curr_column_right = self.column + abs(self.row - curr_row)
+
+                if curr_column_left >= 0 and TABLE_MATRIX[curr_row][curr_column_left] in names_player:
+                    curr_column_left = -1
+                if curr_column_right <= 7 and TABLE_MATRIX[curr_row][curr_column_right] in names_player:
+                    curr_column_right = 8
+
+                if curr_column_left >= 0 and TABLE_MATRIX[curr_row][curr_column_left] not in names_player:
+                    self.available_squares.append((curr_row, curr_column_left))
+                if curr_column_right <= 7 and TABLE_MATRIX[curr_row][curr_column_right] not in names_player:
+                    self.available_squares.append((curr_row, curr_column_right))
+
     
     def display_available_squares(self):
         # and also mark selected square
         marked_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
         marked_square.fill(DARK_GREEN_TRANSPARENT)
-        
+
         rect_marked_square = marked_square.get_rect()
         (x, y) = self.calc_position_screen(self.row, self.column)
         rect_marked_square.center = (x + 1, y + 1) # adding +1 cause board image doesnt contain perfect squares and alignment
@@ -181,11 +242,21 @@ class Piece(pygame.sprite.Sprite):
         for (row, column) in self.available_squares:
             (x, y) = self.calc_position_screen(row, column)
             rect_dot.center = (x, y)
-            screen.blit(image_dot, rect_dot)
+            # if its not empty square, then player is capturing
+            # marking it green
+            if TABLE_MATRIX[row][column] != '.':
+                marked_square.fill(DARK_GREEN_TRANSPARENT1)
+                (x, y) = self.calc_position_screen(row, column)
+                rect_marked_square.center = (x + 1, y + 1) # adding +1 cause board image doesnt contain perfect squares and alignment
+                screen.blit(marked_square, rect_marked_square)
+            # else display a dot
+            else:
+                screen.blit(image_dot, rect_dot)
     
-    def legal_move(self):
-        return False
-
+    def available_move(self):
+        # catches the current (x, y) coordinates of a piece while being dragged accross the board and checks if the chosen square is available
+        (row_try, column_try) = self.calc_position_matrix(self.rect_square.center)
+        return (row_try, column_try) in self.available_squares
 
     def handle_event(self, event):
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
@@ -203,13 +274,22 @@ class Piece(pygame.sprite.Sprite):
                 self.dragging = False
                 self.selected = False
                 # Align the piece to the closest square if move is legal
-                if self.legal_move():
+                if self.available_move():
+                    # marking previous square as available
+                    TABLE_MATRIX[self.row][self.column] = '.'
                     self.row, self.column = self.calc_position_matrix(self.rect_square.center)
                     self.rect.center = self.calc_position_screen(self.row, self.column)
                     self.rect_square.center = self.rect.center
 
                     # Update available squares after the move
                     self.update_available_squares()
+
+                    # check if it was capture
+                    if TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
+                        delete_captured_piece(self.row, self.column)
+
+                    # updating the position matrix
+                    TABLE_MATRIX[self.row][self.column] = self.name
 
                 else: # else reset the piece to current position
                     self.rect.center = self.calc_position_screen(self.row, self.column)
