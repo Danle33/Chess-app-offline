@@ -432,7 +432,36 @@ class Piece(pygame.sprite.Sprite):
             # handle castling
             if not self.moved:
                 # king is on the starting position
-                pass
+                
+                # left castling
+
+                # check if leftmost piece in the row is rook with the same color, and hasnt moved
+                if TABLE_MATRIX[self.row][0] in ["R", "r"] and TABLE_MATRIX[self.row][0] in self.names and not matrix_to_piece[(self.row, 0)].moved:
+                    # check if all squares between are free
+                    free = True
+                    curr_column = 1
+                    while curr_column < self.column:
+                        if TABLE_MATRIX[self.row][curr_column] != '.':
+                            free = False
+                            break
+                        curr_column += 1
+                    if free:
+                        self.available_squares.append((self.row, self.column - 2))
+                
+                # right castling
+
+                # check if rightmost piece in the row is rook with the same color, and hasnt moved
+                if TABLE_MATRIX[self.row][7] in ["R", "r"] and TABLE_MATRIX[self.row][7] in self.names and not matrix_to_piece[(self.row, 7)].moved:
+                    # check if all squares between are free
+                    free = True
+                    curr_column = self.column + 1
+                    while curr_column <= 6:
+                        if TABLE_MATRIX[self.row][curr_column] != '.':
+                            free = False
+                            break
+                        curr_column += 1
+                    if free:
+                        self.available_squares.append((self.row, self.column + 2))
 
             # same as queen, but range is only 1 square
 
@@ -522,6 +551,9 @@ class Piece(pygame.sprite.Sprite):
         # catches the current (x, y) coordinates of a piece while being dragged accross the board and checks if the chosen square is available
         (row_try, column_try) = self.calc_position_matrix(self.rect_square.center)
         return (row_try, column_try) in self.available_squares
+    
+    def update_move(self):
+        pass
 
     def handle_event(self, event):
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
@@ -566,11 +598,45 @@ class Piece(pygame.sprite.Sprite):
                     # mark previous square as available
                     TABLE_MATRIX[self.row][self.column] = '.'
 
-                    self.row, self.column = self.calc_position_matrix(self.rect_square.center)
+                    # if it was king or a rook, disable castling rights by alerting that either moved
+                    if self.name == "K" or self.name == "k" or self.name == "R" or self.name == "r":
+                        self.moved = True
+
+                    # save previous position to handle castling
+                    prev_column = self.column
+
+                    (self.row, self.column) = self.calc_position_matrix(self.rect_square.center)
 
                     # handle castling by checking if king somehow "moved" two squares
                     if self.name in ["K", "k"]:
-                        pass
+                        # left castling
+                        if self.column + 2 == prev_column:
+                            rook = matrix_to_piece[(self.row, 0)]
+                            # updating rooks current square
+                            rook.rect.center = rook.calc_position_screen(self.row, self.column + 1)
+                            rook.rect_square.center = rook.rect.center
+                            (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
+                            TABLE_MATRIX[self.row][self.column + 1] = rook.name
+                            matrix_to_piece[(self.row, self.column + 1)] = rook
+                            # updating rooks previous square
+                            TABLE_MATRIX[self.row][0] = '.'
+                            matrix_to_piece[(self.row, 0)] = None
+                            rook.update_available_squares()
+
+                        # right castling
+                        if prev_column + 2 == self.column:
+                            rook = matrix_to_piece[(self.row, 7)]
+                            # updating rooks current square
+                            rook.rect.center = rook.calc_position_screen(self.row, self.column - 1)
+                            rook.rect_square.center = rook.rect.center
+                            (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
+                            TABLE_MATRIX[self.row][self.column - 1] = rook.name
+                            matrix_to_piece[(self.row, self.column - 1)] = rook
+                            # updating rooks previous square
+                            TABLE_MATRIX[self.row][7] = '.'
+                            matrix_to_piece[(self.row, 7)] = None
+                            rook.update_available_squares()
+
 
                     self.rect.center = self.calc_position_screen(self.row, self.column)
                     self.rect_square.center = self.rect.center
@@ -586,10 +652,6 @@ class Piece(pygame.sprite.Sprite):
 
                     # updating position dictionary
                     matrix_to_piece[(self.row, self.column)] = self
-
-                    # if it was king or a rook, disable castling rights by alerting that either moved
-                    if self.name == "K" or self.name == "k" or self.name == "R" or self.name == "r":
-                        self.moved = True
 
                     # update squares for every piece
                     update_available_squares()
