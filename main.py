@@ -12,11 +12,6 @@ HEIGHT = 975
 TABLE_X = 0
 TABLE_Y = HEIGHT / 2 - WIDTH / 2
 
-# initializing table matrix, dot represents non occupied square
-TABLE_MATRIX = []
-for i in range(8):
-    TABLE_MATRIX.append(['.'] * 8)
-
 #colors
 WHITE = (255, 255, 255)
 BLACKY = (30, 30, 30)
@@ -35,6 +30,11 @@ game_started = False
 
 # either player (user) or opponent
 player_to_move = "p"
+
+# initializing table matrix, dot represents non occupied square
+TABLE_MATRIX = []
+for i in range(8):
+    TABLE_MATRIX.append(['.'] * 8)
 
 # dictionary that maps (row, column) to piece instance
 matrix_to_piece = {}
@@ -147,7 +147,7 @@ class Piece(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = self.calc_position_screen(self.row, self.column)
 
-        # Separate rect for the larger square
+        # Separated larger rect for the square
         self.rect_square = pygame.Rect(0, 0, SQUARE_SIZE, SQUARE_SIZE)
         self.rect_square.center = self.rect.center  # Align centers
 
@@ -198,11 +198,11 @@ class Piece(pygame.sprite.Sprite):
                     # capturing opponents piece, one square diagonally, with bound check
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row - 1][self.column - 1]
-                        if capture_left not in names_player and capture_left not in names_player and capture_left != '.':
+                        if capture_left not in names_player and capture_left != '.':
                             self.available_squares.append((self.row - 1, self.column - 1))
                     if self.column + 1 < 8:
                         capture_right = TABLE_MATRIX[self.row - 1][self.column + 1]
-                        if capture_right not in names_player and capture_right not in names_player and capture_right != '.':
+                        if capture_right not in names_player and capture_right != '.':
                             self.available_squares.append((self.row - 1, self.column + 1))
             else:
                 next_row = self.row + 1
@@ -552,8 +552,74 @@ class Piece(pygame.sprite.Sprite):
         (row_try, column_try) = self.calc_position_matrix(self.rect_square.center)
         return (row_try, column_try) in self.available_squares
     
-    def update_move(self):
-        pass
+    def make_move(self):
+        # mark previous square as available
+        TABLE_MATRIX[self.row][self.column] = '.'
+
+        # if it was king or a rook, disable castling rights by alerting that either moved
+        if self.name in ["K", "k", "R", "r"]:
+            self.moved = True
+
+        # save previous position to handle castling
+        prev_column = self.column
+
+        (self.row, self.column) = self.calc_position_matrix(self.rect_square.center)
+
+        # handle castling by checking if king somehow "moved" two squares
+        if self.name in ["K", "k"]:
+            # left castling
+            if self.column + 2 == prev_column:
+                rook = matrix_to_piece[(self.row, 0)]
+                # updating rooks current square
+                rook.rect.center = rook.calc_position_screen(self.row, self.column + 1)
+                rook.rect_square.center = rook.rect.center
+                (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
+                TABLE_MATRIX[self.row][self.column + 1] = rook.name
+                matrix_to_piece[(self.row, self.column + 1)] = rook
+                # updating rooks previous square
+                TABLE_MATRIX[self.row][0] = '.'
+                matrix_to_piece[(self.row, 0)] = None
+                rook.update_available_squares()
+
+            # right castling
+            if prev_column + 2 == self.column:
+                rook = matrix_to_piece[(self.row, 7)]
+                # updating rooks current square
+                rook.rect.center = rook.calc_position_screen(self.row, self.column - 1)
+                rook.rect_square.center = rook.rect.center
+                (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
+                TABLE_MATRIX[self.row][self.column - 1] = rook.name
+                matrix_to_piece[(self.row, self.column - 1)] = rook
+                # updating rooks previous square
+                TABLE_MATRIX[self.row][7] = '.'
+                matrix_to_piece[(self.row, 7)] = None
+                rook.update_available_squares()
+
+
+        self.rect.center = self.calc_position_screen(self.row, self.column)
+        self.rect_square.center = self.rect.center
+
+        # check if it was capture
+        if TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
+            captured_piece = matrix_to_piece[((self.row, self.column))]
+            captured_piece.kill()
+            matrix_to_piece[(row, column)] = None
+
+        # updating the position matrix
+        TABLE_MATRIX[self.row][self.column] = self.name
+
+        # updating position dictionary
+        matrix_to_piece[(self.row, self.column)] = self
+
+        # update squares for every piece
+        update_available_squares()
+
+        # next player
+        global player_to_move
+        if player_to_move == "p":
+            player_to_move = "o"
+        else:
+            player_to_move = "p"
 
     def handle_event(self, event):
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
@@ -580,14 +646,36 @@ class Piece(pygame.sprite.Sprite):
                 self.dragging = False
                 self.holding = False
                 return
+
             if mouse_on_piece:
                 if self.selected:
                     self.unselecting_downclick = True
                 else:
                     self.selected = True
                 self.holding = True
-            else:
-                self.selected = False
+            # handle making a move by clicking at an availablq square
+            elif self.selected:
+                curr_x = max(mouse_x, self.rect.size[0] / 2)
+                curr_x = min(curr_x, WIDTH - self.rect.size[0] / 2)
+                curr_y = max(mouse_y, TABLE_Y + self.rect.size[1] / 2)
+                curr_y = min(curr_y, TABLE_Y + 8 * SQUARE_SIZE - self.rect.size[1] / 2)
+
+                self.rect.center = (curr_x, curr_y)
+                self.rect_square.center = self.rect.center
+
+                if self.available_move():
+                    self.selected = False
+                    self.dragging = False
+                    self.holding = False
+                    self.unselecting_downclick = False
+                    self.make_move()
+                    return
+                else:
+                    self.rect.center = self.calc_position_screen(self.row, self.column)
+                    self.rect_square.center = self.rect.center
+                    self.selected = False
+                    self.dragging = False
+                    self.holding = False
         
         if event.type == pygame.MOUSEBUTTONUP and mouse_on_piece:
             if self.dragging:
@@ -595,74 +683,7 @@ class Piece(pygame.sprite.Sprite):
                 self.selected = False
                 # Align the piece to the closest square if move is legal
                 if self.available_move():
-                    # mark previous square as available
-                    TABLE_MATRIX[self.row][self.column] = '.'
-
-                    # if it was king or a rook, disable castling rights by alerting that either moved
-                    if self.name == "K" or self.name == "k" or self.name == "R" or self.name == "r":
-                        self.moved = True
-
-                    # save previous position to handle castling
-                    prev_column = self.column
-
-                    (self.row, self.column) = self.calc_position_matrix(self.rect_square.center)
-
-                    # handle castling by checking if king somehow "moved" two squares
-                    if self.name in ["K", "k"]:
-                        # left castling
-                        if self.column + 2 == prev_column:
-                            rook = matrix_to_piece[(self.row, 0)]
-                            # updating rooks current square
-                            rook.rect.center = rook.calc_position_screen(self.row, self.column + 1)
-                            rook.rect_square.center = rook.rect.center
-                            (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                            TABLE_MATRIX[self.row][self.column + 1] = rook.name
-                            matrix_to_piece[(self.row, self.column + 1)] = rook
-                            # updating rooks previous square
-                            TABLE_MATRIX[self.row][0] = '.'
-                            matrix_to_piece[(self.row, 0)] = None
-                            rook.update_available_squares()
-
-                        # right castling
-                        if prev_column + 2 == self.column:
-                            rook = matrix_to_piece[(self.row, 7)]
-                            # updating rooks current square
-                            rook.rect.center = rook.calc_position_screen(self.row, self.column - 1)
-                            rook.rect_square.center = rook.rect.center
-                            (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                            TABLE_MATRIX[self.row][self.column - 1] = rook.name
-                            matrix_to_piece[(self.row, self.column - 1)] = rook
-                            # updating rooks previous square
-                            TABLE_MATRIX[self.row][7] = '.'
-                            matrix_to_piece[(self.row, 7)] = None
-                            rook.update_available_squares()
-
-
-                    self.rect.center = self.calc_position_screen(self.row, self.column)
-                    self.rect_square.center = self.rect.center
-
-                    # check if it was capture
-                    if TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
-                        captured_piece = matrix_to_piece[((self.row, self.column))]
-                        captured_piece.kill()
-                        matrix_to_piece[(row, column)] = None
-
-                    # updating the position matrix
-                    TABLE_MATRIX[self.row][self.column] = self.name
-
-                    # updating position dictionary
-                    matrix_to_piece[(self.row, self.column)] = self
-
-                    # update squares for every piece
-                    update_available_squares()
-
-                    # next player
-                    global player_to_move
-                    if player_to_move == "p":
-                        player_to_move = "o"
-                    else:
-                        player_to_move = "p"
-
+                    self.make_move()
                 else: # else reset the piece to the current position
                     self.rect.center = self.calc_position_screen(self.row, self.column)
                     self.rect_square.center = self.rect.center
