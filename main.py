@@ -273,6 +273,20 @@ class Piece(pygame.sprite.Sprite):
                         self.available_squares.append((self.row - 2, self.column))
 
                     # capturing opponents piece, one square diagonally, with bound check
+
+                    # enpassant square
+                    if len(fen) > 0:
+                        ep_square = fen[-1].split(" ")[-3]
+                        if ep_square != "-":
+                            if not flipped:
+                                row = 7 - (int(ep_square[1]) - 1)
+                                column = ord(ep_square[0]) - ord("a")
+                            else:
+                                row = (int(ep_square[1]) - 1)
+                                column = 7 - (ord(ep_square[0]) - ord("a"))
+                            self.available_squares.append((row, column))
+
+
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row - 1][self.column - 1]
                         if capture_left not in names_player and capture_left != '.':
@@ -293,6 +307,19 @@ class Piece(pygame.sprite.Sprite):
                         self.available_squares.append((self.row + 2, self.column))
                     
                     # capturing opponents piece, one square diagonally, with bound check
+
+                    # enpassant square
+                    if len(fen) > 0:
+                        ep_square = fen[-1].split(" ")[-3]
+                        if ep_square != "-":
+                            if not flipped:
+                                row = 7 - (int(ep_square[1]) - 1)
+                                column = ord(ep_square[0]) - ord("a")
+                            else:
+                                row = (int(ep_square[1]) - 1)
+                                column = 7 - (ord(ep_square[0]) - ord("a"))
+                            self.available_squares.append((row, column))
+                            
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row + 1][self.column - 1]
                         if capture_left not in self.names and capture_left not in self.names and capture_left != '.':
@@ -704,12 +731,27 @@ class Piece(pygame.sprite.Sprite):
         global enpassant_square, halfmoves
         if self.name in ["P", "p"]:
             halfmoves = 0
-            if not flipped:
-                #  enpassant square (for example e3) is constructed with converting a row to a file and getting the average of the two movement squares
-                # adding 7 to rows cause table begin is up not down
-                enpassant_square = chr(ord('a') + self.column) + str((7 - prev_row + 7 - self.row) // 2 + 1)
-            else:
-                enpassant_square = chr(ord('a') + 7 - self.column) + str((prev_row + self.row) // 2 + 1)
+            if abs(prev_row - self.row) == 2:
+                if not flipped:
+                    #  enpassant square (for example e3) is constructed with converting a row to a file and getting the average of the two movement squares
+                    # adding 7 to rows cause table begin is up not down
+                    enpassant_square = chr(ord('a') + self.column) + str((7 - prev_row + 7 - self.row) // 2 + 1)
+                else:
+                    enpassant_square = chr(ord('a') + 7 - self.column) + str((prev_row + self.row) // 2 + 1)
+        
+        # capturing enpassant by checking if pawn moved diagonally to an empty square
+        if self.name in ["P", "p"] and prev_column != self.column and TABLE_MATRIX[self.row][self.column] == '.':
+            if TABLE_MATRIX[self.row + 1][self.column] in ["P", "p"]:
+                halfmoves = 0
+                captured_piece = matrix_to_piece[((self.row + 1, self.column))]
+                captured_piece.kill()
+                matrix_to_piece[(row, column)] = None
+            if TABLE_MATRIX[self.row - 1][self.column] in ["P", "p"]:
+                halfmoves = 0
+                captured_piece = matrix_to_piece[((self.row - 1, self.column))]
+                captured_piece.kill()
+                matrix_to_piece[(row, column)] = None
+
 
 
         self.rect.center = self.calc_position_screen(self.row, self.column)
@@ -732,9 +774,6 @@ class Piece(pygame.sprite.Sprite):
         # updating position dictionary
         matrix_to_piece[(self.row, self.column)] = self
 
-        # update squares for every piece
-        update_available_squares()
-
         # next player
         global player_to_move
         if player_to_move == "p":
@@ -746,6 +785,9 @@ class Piece(pygame.sprite.Sprite):
         scan_fen()
         enpassant_square = "-"
         print(fen[-1])
+
+        # update squares for every piece
+        update_available_squares()
 
     def handle_event(self, event):
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
