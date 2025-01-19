@@ -36,6 +36,18 @@ TABLE_MATRIX = []
 for i in range(8):
     TABLE_MATRIX.append(['.'] * 8)
 
+# fen code, list of strings where every string describes one position
+fen = []
+
+# flipped indicates player is black
+flipped = False
+enpassant_square = "-"
+halfmoves = 0
+fullmoves = 0
+
+# availability of each of 4 types of castling, used in fen
+K = k = Q = q = True
+
 # dictionary that maps (row, column) to piece instance
 matrix_to_piece = {}
 for row in range(0, 8):
@@ -63,6 +75,71 @@ def update_available_squares():
         piece.update_available_squares()
     for piece in pieces_opponent:
         piece.update_available_squares()
+
+def scan_fen():
+    # table is seen from whites perspective
+    curr_fen = ""
+    blank_squares_counter = 0
+    if not flipped:
+        for row in range(8):
+            curr_fen += "/"
+            blank_squares_counter = 0
+            for column in range(8):
+                if TABLE_MATRIX[row][column] != '.':
+                    if blank_squares_counter > 0:
+                        curr_fen += str(blank_squares_counter)
+                    curr_fen += TABLE_MATRIX[row][column]
+                    blank_squares_counter = 0
+                else:
+                    blank_squares_counter += 1
+            if blank_squares_counter > 0:
+                curr_fen += str(blank_squares_counter)
+    else:
+        for row in range(7, -1, -1):
+            curr_fen += "/"
+            blank_squares_counter = 0
+            for column in range(7, -1, -1):
+                if TABLE_MATRIX[row][column] != '.':
+                    if blank_squares_counter > 0:
+                        curr_fen += str(blank_squares_counter)
+                    curr_fen += TABLE_MATRIX[row][column]
+                    blank_squares_counter = 0
+                else:
+                    blank_squares_counter += 1
+            if blank_squares_counter > 0:
+                curr_fen += str(blank_squares_counter)
+
+    global fullmoves
+    if player_to_move == "p":
+        if player_color == "w":
+            curr_fen += " w"
+            fullmoves += 1
+        else:
+            curr_fen += " b"
+    else:
+        if player_color == "w":
+            curr_fen += " b"
+        else:
+            curr_fen += " w"
+            fullmoves += 1
+    
+    curr_fen += " "
+
+    if not K and not k and not Q and not q:
+        curr_fen += "-"
+    else:
+        if K: curr_fen += "K"
+        if Q: curr_fen += "Q"
+        if k: curr_fen += "k"
+        if q: curr_fen += "q"
+    
+    curr_fen += " "
+    curr_fen += enpassant_square
+    curr_fen += f" {halfmoves} {fullmoves}"
+
+    # remove first slash
+    curr_fen = curr_fen[1:]
+    fen.append(curr_fen)
 
 # calculates new dimensions based on initial ones which are 450*975
 # handles rescalling while keeping aspect ratio
@@ -194,7 +271,7 @@ class Piece(pygame.sprite.Sprite):
                     # two squares from starting position
                     if self.row == 6 and TABLE_MATRIX[self.row - 2][self.column] == '.':
                         self.available_squares.append((self.row - 2, self.column))
-                    
+
                     # capturing opponents piece, one square diagonally, with bound check
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row - 1][self.column - 1]
@@ -558,9 +635,33 @@ class Piece(pygame.sprite.Sprite):
 
         # if it was king or a rook, disable castling rights by alerting that either moved
         if self.name in ["K", "k", "R", "r"]:
+
+            if not self.moved:
+                global K, Q, k, q
+                if self.name == "K":
+                    # disable both sides white
+                    K = Q = False
+                elif self.name == "k":
+                    # disable both sides black
+                    k = q = False
+            
+                elif self.name == "R":
+                    # check king side by comparing distance to the king
+                    if (0 <= self.column + 3 <= 7 and TABLE_MATRIX[self.row][self.column + 3] == "K") or (0 <= self.column - 3 <= 7 and TABLE_MATRIX[self.row][self.column - 3] == "K"):
+                        K = False
+                    else:
+                        Q = False
+
+                elif self.name == "r":
+                    # check king side by comparing distance to the king
+                    if (0 <= self.column + 3 <= 7 and TABLE_MATRIX[self.row][self.column + 3] == "k") or (0 <= self.column - 3 <= 7 and TABLE_MATRIX[self.row][self.column - 3] == "k"):
+                        k = False
+                    else:
+                        q = False
             self.moved = True
 
-        # save previous position to handle castling
+        # save previous position to handle castling and en passant
+        prev_row = self.row
         prev_column = self.column
 
         (self.row, self.column) = self.calc_position_matrix(self.rect_square.center)
@@ -569,31 +670,46 @@ class Piece(pygame.sprite.Sprite):
         if self.name in ["K", "k"]:
             # left castling
             if self.column + 2 == prev_column:
-                rook = matrix_to_piece[(self.row, 0)]
+                ((rook_prev_x, rook_prev_y), (rook_curr_x, rook_curr_y)) = ((self.row, 0), (self.row, self.column + 1))
+
+                rook = matrix_to_piece[(rook_prev_x, rook_prev_y)]
                 # updating rooks current square
-                rook.rect.center = rook.calc_position_screen(self.row, self.column + 1)
+                rook.rect.center = rook.calc_position_screen(rook_curr_x, rook_curr_y)
                 rook.rect_square.center = rook.rect.center
                 (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                TABLE_MATRIX[self.row][self.column + 1] = rook.name
-                matrix_to_piece[(self.row, self.column + 1)] = rook
+                TABLE_MATRIX[rook_curr_x][rook_curr_y] = rook.name
+                matrix_to_piece[(rook_curr_x, rook_curr_y)] = rook
                 # updating rooks previous square
-                TABLE_MATRIX[self.row][0] = '.'
-                matrix_to_piece[(self.row, 0)] = None
+                TABLE_MATRIX[rook_prev_x][rook_prev_y] = '.'
+                matrix_to_piece[(rook_prev_x, rook_curr_y)] = None
                 rook.update_available_squares()
 
             # right castling
             if prev_column + 2 == self.column:
-                rook = matrix_to_piece[(self.row, 7)]
+                ((rook_prev_x, rook_prev_y), (rook_curr_x, rook_curr_y)) = ((self.row, 7), (self.row, self.column - 1))
+
+                rook = matrix_to_piece[(rook_prev_x, rook_prev_y)]
                 # updating rooks current square
-                rook.rect.center = rook.calc_position_screen(self.row, self.column - 1)
+                rook.rect.center = rook.calc_position_screen(rook_curr_x, rook_curr_y)
                 rook.rect_square.center = rook.rect.center
                 (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                TABLE_MATRIX[self.row][self.column - 1] = rook.name
-                matrix_to_piece[(self.row, self.column - 1)] = rook
+                TABLE_MATRIX[rook_curr_x][rook_curr_y] = rook.name
+                matrix_to_piece[(rook_curr_x, rook_curr_y)] = rook
                 # updating rooks previous square
-                TABLE_MATRIX[self.row][7] = '.'
-                matrix_to_piece[(self.row, 7)] = None
+                TABLE_MATRIX[rook_prev_x][rook_prev_y] = '.'
+                matrix_to_piece[(rook_prev_x, rook_curr_y)] = None
                 rook.update_available_squares()
+
+        # mark en passant square
+        global enpassant_square, halfmoves
+        if self.name in ["P", "p"]:
+            halfmoves = 0
+            if not flipped:
+                #  enpassant square (for example e3) is constructed with converting a row to a file and getting the average of the two movement squares
+                # adding 7 to rows cause table begin is up not down
+                enpassant_square = chr(ord('a') + self.column) + str((7 - prev_row + 7 - self.row) // 2 + 1)
+            else:
+                enpassant_square = chr(ord('a') + 7 - self.column) + str((prev_row + self.row) // 2 + 1)
 
 
         self.rect.center = self.calc_position_screen(self.row, self.column)
@@ -601,9 +717,14 @@ class Piece(pygame.sprite.Sprite):
 
         # check if it was capture
         if TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
+            halfmoves = 0
             captured_piece = matrix_to_piece[((self.row, self.column))]
             captured_piece.kill()
             matrix_to_piece[(row, column)] = None
+        
+        # if its not a pawn move nor a capture, increment halfmoves
+        if not self.name in ["P", "p"] and not TABLE_MATRIX[self.row][self.column] != '.':
+            halfmoves += 1
 
         # updating the position matrix
         TABLE_MATRIX[self.row][self.column] = self.name
@@ -620,6 +741,11 @@ class Piece(pygame.sprite.Sprite):
             player_to_move = "o"
         else:
             player_to_move = "p"
+        
+        # update fen history
+        scan_fen()
+        enpassant_square = "-"
+        print(fen[-1])
 
     def handle_event(self, event):
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
@@ -789,6 +915,8 @@ if player_color == "b":
     names_player = ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p', 'r', 'n', 'b', 'k', 'q', 'b', 'n', 'r']
     names_opponent = [piece.upper() for piece in names_player]
     (route_player, route_opponent) = (route_opponent, route_player)
+    # treat table as flippedped
+    flipped = True
 
 # initializing piece by piece, and a position matrix
 row = 6
@@ -816,6 +944,9 @@ for name in names_opponent:
     TABLE_MATRIX[row][column] = name
     matrix_to_piece[(row, column)] = piece
     column += 1
+
+scan_fen()
+print(fen[-1])
 
 # game loop
 while 1:
