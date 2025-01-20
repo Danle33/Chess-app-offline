@@ -18,6 +18,15 @@ BLACKY = (30, 30, 30)
 DARK_GREEN_TRANSPARENT = (0, 50, 0, 50)
 DARK_GREEN_TRANSPARENT1 = (0, 50, 0, 25)
 
+# darken the screen while promoting
+dark_overlay = pygame.Surface((WIDTH, WIDTH))  # Create a surface
+dark_overlay.set_alpha(200)  # Set alpha (0 is transparent, 255 is opaque)
+dark_overlay.fill((0, 0, 0))  # Fill with black
+
+promoting = False
+pieces_promotion = pygame.sprite.Group()
+promotion_square = None
+
 #globals
 minutes = 0.25
 availableMinutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
@@ -284,7 +293,8 @@ class Piece(pygame.sprite.Sprite):
                             else:
                                 row = (int(ep_square[1]) - 1)
                                 column = 7 - (ord(ep_square[0]) - ord("a"))
-                            self.available_squares.append((row, column))
+                            if self.row == row + 1 and (self.column == column - 1 or self.column == column + 1):
+                                self.available_squares.append((row, column))
 
 
                     if self.column - 1 >= 0:
@@ -318,7 +328,8 @@ class Piece(pygame.sprite.Sprite):
                             else:
                                 row = (int(ep_square[1]) - 1)
                                 column = 7 - (ord(ep_square[0]) - ord("a"))
-                            self.available_squares.append((row, column))
+                            if self.row == row - 1 and (self.column == column - 1 or self.column == column + 1):
+                                self.available_squares.append((row, column))
                             
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row + 1][self.column - 1]
@@ -625,7 +636,6 @@ class Piece(pygame.sprite.Sprite):
             if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.append((curr_row, curr_column))
 
-    
     def display_available_squares(self):
         # and also mark selected square
         marked_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
@@ -733,7 +743,7 @@ class Piece(pygame.sprite.Sprite):
             halfmoves = 0
             if abs(prev_row - self.row) == 2:
                 if not flipped:
-                    #  enpassant square (for example e3) is constructed with converting a row to a file and getting the average of the two movement squares
+                    # enpassant square (for example e3) is constructed by converting a row to a file and getting the average of the two movement squares
                     # adding 7 to rows cause table begin is up not down
                     enpassant_square = chr(ord('a') + self.column) + str((7 - prev_row + 7 - self.row) // 2 + 1)
                 else:
@@ -745,14 +755,12 @@ class Piece(pygame.sprite.Sprite):
                 halfmoves = 0
                 captured_piece = matrix_to_piece[((self.row + 1, self.column))]
                 captured_piece.kill()
-                matrix_to_piece[(row, column)] = None
+                matrix_to_piece[(self.row, self.column)] = None
             if TABLE_MATRIX[self.row - 1][self.column] in ["P", "p"]:
                 halfmoves = 0
                 captured_piece = matrix_to_piece[((self.row - 1, self.column))]
                 captured_piece.kill()
-                matrix_to_piece[(row, column)] = None
-
-
+                matrix_to_piece[(self.row, self.column)] = None
 
         self.rect.center = self.calc_position_screen(self.row, self.column)
         self.rect_square.center = self.rect.center
@@ -762,7 +770,7 @@ class Piece(pygame.sprite.Sprite):
             halfmoves = 0
             captured_piece = matrix_to_piece[((self.row, self.column))]
             captured_piece.kill()
-            matrix_to_piece[(row, column)] = None
+            matrix_to_piece[(self.row, self.column)] = None
         
         # if its not a pawn move nor a capture, increment halfmoves
         if not self.name in ["P", "p"] and not TABLE_MATRIX[self.row][self.column] != '.':
@@ -773,6 +781,41 @@ class Piece(pygame.sprite.Sprite):
 
         # updating position dictionary
         matrix_to_piece[(self.row, self.column)] = self
+
+        # handling promotion
+        if self.name in ["P", "p"]:
+            global promoting, pawn_promoting, promotion_square
+            row = self.row
+            if self.row == 0:
+                promotion_square = (self.row, self.column)
+                promoting = True
+                names_list = ["Q", "R", "N", "B"]
+                if player_color == "b":
+                    names_list = [name.lower() for name in names_list]
+                    print(names_list)
+                    for name in names_list:
+                        pieces_promotion.add(Piece(name, pygame.image.load(route_player + f"{name}.png"), row, self.column, self.names))
+                        row += 1
+                else:
+                    for name in names_list:
+                        pieces_promotion.add(Piece(name, pygame.image.load(route_player + f"{name}.png"), row, self.column, self.names))
+                        row += 1
+            if self.row == 7:
+                promotion_square = (self.row, self.column)
+                promoting = True
+                names_list = ["Q", "R", "N", "B"]
+                if player_color == "b":
+                    names_list = [name.lower() for name in names_list]
+                    for name in names_list:
+                        pieces_promotion.add(Piece(name, pygame.image.load(route_opponent + f"{name}.png"), row, self.column, self.names))
+                        row -= 1
+                else:
+                    for name in names_list:
+                        pieces_promotion.add(Piece(name, pygame.image.load(route_opponent + f"{name}.png"), row, self.column, self.names))
+                        row -= 1
+
+
+
 
         # next player
         global player_to_move
@@ -874,6 +917,34 @@ class Piece(pygame.sprite.Sprite):
             self.rect.center = (curr_x, curr_y)
             self.rect_square.center = self.rect.center
 
+    def handle_event_promotion(self, event):
+        (mouse_x, mouse_y) = pygame.mouse.get_pos()
+        mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
+        left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
+
+        if left_click and mouse_on_piece:
+            global promoting, promotion_square, pieces_promotion
+
+            (row, column) = promotion_square
+            self.row = row
+            self.column = column
+            TABLE_MATRIX[row][column] = self.name
+
+            pawn = matrix_to_piece[((row, column))]
+            pawn.kill()
+
+            new_piece = Piece(self.name, self.image, self.row, self.column, self.names)
+            matrix_to_piece[((row, column))] = new_piece
+            if self.row == 0:
+                pieces_player.add(new_piece)
+            elif self.row == 7:
+                pieces_opponent.add(new_piece)
+
+            for piece in pieces_promotion:
+                piece.kill()
+            
+            pieces_promotion = pygame.sprite.Group()
+            promoting = False
 
 # background image
 image_bg = pygame.image.load("Assets/dark/backgrounds/background dark 1.png")
@@ -957,7 +1028,7 @@ if player_color == "b":
     names_player = ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p', 'r', 'n', 'b', 'k', 'q', 'b', 'n', 'r']
     names_opponent = [piece.upper() for piece in names_player]
     (route_player, route_opponent) = (route_opponent, route_player)
-    # treat table as flippedped
+    # treat table as flipped
     flipped = True
 
 # initializing piece by piece, and a position matrix
@@ -1017,6 +1088,14 @@ while 1:
 
     pieces_player.draw(screen)
     pieces_opponent.draw(screen)
+
+    if promoting:
+        # darken the screen
+        screen.blit(dark_overlay, (TABLE_X, TABLE_Y))
+        pieces_promotion.draw(screen)
+
+        for piece in pieces_promotion:
+            piece.handle_event_promotion(event)
 
     pygame.display.flip()
     clock.tick(60)
