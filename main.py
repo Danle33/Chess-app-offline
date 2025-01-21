@@ -89,25 +89,14 @@ def scan_fen():
     # table is seen from whites perspective
     curr_fen = ""
     blank_squares_counter = 0
-    if not flipped:
-        for row in range(8):
+    (start, end, step) = (0, 8, 1)
+    if player_color == "b":
+        (start, end, step) = (7, -1, -1)
+    
+    for row in range(start, end, step):
             curr_fen += "/"
             blank_squares_counter = 0
-            for column in range(8):
-                if TABLE_MATRIX[row][column] != '.':
-                    if blank_squares_counter > 0:
-                        curr_fen += str(blank_squares_counter)
-                    curr_fen += TABLE_MATRIX[row][column]
-                    blank_squares_counter = 0
-                else:
-                    blank_squares_counter += 1
-            if blank_squares_counter > 0:
-                curr_fen += str(blank_squares_counter)
-    else:
-        for row in range(7, -1, -1):
-            curr_fen += "/"
-            blank_squares_counter = 0
-            for column in range(7, -1, -1):
+            for column in range(start, end, step):
                 if TABLE_MATRIX[row][column] != '.':
                     if blank_squares_counter > 0:
                         curr_fen += str(blank_squares_counter)
@@ -333,11 +322,11 @@ class Piece(pygame.sprite.Sprite):
                             
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row + 1][self.column - 1]
-                        if capture_left not in self.names and capture_left not in self.names and capture_left != '.':
+                        if capture_left not in names_opponent and capture_left != '.':
                             self.available_squares.append((self.row + 1, self.column - 1))
                     if self.column + 1 < 8:
                         capture_right = TABLE_MATRIX[self.row + 1][self.column + 1]
-                        if capture_right not in self.names and capture_right not in self.names and capture_right != '.':
+                        if capture_right not in names_opponent and capture_right != '.':
                             self.available_squares.append((self.row + 1, self.column + 1))
 
         if self.name == 'N' or self.name == 'n':
@@ -543,16 +532,16 @@ class Piece(pygame.sprite.Sprite):
                 self.available_squares.append((curr_row, curr_column))
                 curr_column += 1
         
-        if self.name == "K" or self.name == 'k':
+        if self.name == "K" or self.name == "k":
             # handle castling
             if not self.moved:
                 # king is on the starting position
-                
+
                 # left castling
 
                 # check if leftmost piece in the row is rook with the same color, and hasnt moved
                 if TABLE_MATRIX[self.row][0] in ["R", "r"] and TABLE_MATRIX[self.row][0] in self.names and not matrix_to_piece[(self.row, 0)].moved:
-                    # check if all squares between are free
+                    # check if all squares between are free and not attacked by pieces
                     free = True
                     curr_column = 1
                     while curr_column < self.column:
@@ -567,7 +556,7 @@ class Piece(pygame.sprite.Sprite):
 
                 # check if rightmost piece in the row is rook with the same color, and hasnt moved
                 if TABLE_MATRIX[self.row][7] in ["R", "r"] and TABLE_MATRIX[self.row][7] in self.names and not matrix_to_piece[(self.row, 7)].moved:
-                    # check if all squares between are free
+                    # check if all squares between are free and not attacked by pieces
                     free = True
                     curr_column = self.column + 1
                     while curr_column <= 6:
@@ -742,7 +731,7 @@ class Piece(pygame.sprite.Sprite):
         if self.name in ["P", "p"]:
             halfmoves = 0
             if abs(prev_row - self.row) == 2:
-                if not flipped:
+                if player_color == "w":
                     # enpassant square (for example e3) is constructed by converting a row to a file and getting the average of the two movement squares
                     # adding 7 to rows cause table begin is up not down
                     enpassant_square = chr(ord('a') + self.column) + str((7 - prev_row + 7 - self.row) // 2 + 1)
@@ -784,7 +773,7 @@ class Piece(pygame.sprite.Sprite):
 
         # handling promotion
         if self.name in ["P", "p"]:
-            global promoting, pawn_promoting, promotion_square
+            global promoting, promotion_square
             row = self.row
             if self.row == 0:
                 promotion_square = (self.row, self.column)
@@ -792,30 +781,18 @@ class Piece(pygame.sprite.Sprite):
                 names_list = ["Q", "R", "N", "B"]
                 if player_color == "b":
                     names_list = [name.lower() for name in names_list]
-                    print(names_list)
-                    for name in names_list:
-                        pieces_promotion.add(Piece(name, pygame.image.load(route_player + f"{name}.png"), row, self.column, self.names))
-                        row += 1
-                else:
-                    for name in names_list:
-                        pieces_promotion.add(Piece(name, pygame.image.load(route_player + f"{name}.png"), row, self.column, self.names))
-                        row += 1
+                for name in names_list:
+                    pieces_promotion.add(Piece(name, pygame.image.load(route_player + f"{name}.png"), row, self.column, self.names))
+                    row += 1
             if self.row == 7:
                 promotion_square = (self.row, self.column)
                 promoting = True
                 names_list = ["Q", "R", "N", "B"]
-                if player_color == "b":
+                if player_color == "w":
                     names_list = [name.lower() for name in names_list]
-                    for name in names_list:
-                        pieces_promotion.add(Piece(name, pygame.image.load(route_opponent + f"{name}.png"), row, self.column, self.names))
-                        row -= 1
-                else:
-                    for name in names_list:
-                        pieces_promotion.add(Piece(name, pygame.image.load(route_opponent + f"{name}.png"), row, self.column, self.names))
-                        row -= 1
-
-
-
+                for name in names_list:
+                    pieces_promotion.add(Piece(name, pygame.image.load(route_opponent + f"{name}.png"), row, self.column, self.names))
+                    row -= 1
 
         # next player
         global player_to_move
@@ -825,9 +802,10 @@ class Piece(pygame.sprite.Sprite):
             player_to_move = "p"
         
         # update fen history
-        scan_fen()
+        if not promoting:
+            scan_fen()
+            print(fen[-1])
         enpassant_square = "-"
-        print(fen[-1])
 
         # update squares for every piece
         update_available_squares()
@@ -945,6 +923,9 @@ class Piece(pygame.sprite.Sprite):
             
             pieces_promotion = pygame.sprite.Group()
             promoting = False
+            scan_fen()
+            print(fen[-1])
+            update_available_squares()
 
 # background image
 image_bg = pygame.image.load("Assets/dark/backgrounds/background dark 1.png")
@@ -1058,6 +1039,7 @@ for name in names_opponent:
     matrix_to_piece[(row, column)] = piece
     column += 1
 
+update_available_squares()
 scan_fen()
 print(fen[-1])
 
@@ -1099,4 +1081,3 @@ while 1:
 
     pygame.display.flip()
     clock.tick(60)
-
