@@ -80,10 +80,64 @@ def render_text(s, x, y, font_size):
 
 # updates available squares after every move for each piece
 def update_available_squares():
-    for piece in pieces_player:
-        piece.update_available_squares()
-    for piece in pieces_opponent:
-        piece.update_available_squares()
+    # updating available squares first pass (no filtering pins and checks)
+    if player_to_move == "p":
+        for piece in pieces_player:
+            piece.update_available_squares()
+    else:
+        for piece in pieces_opponent:
+            piece.update_available_squares()
+    
+    king_player_position = king_opponent_position = ()
+    # finding both kings
+    for row in range(8):
+        for column in range(8):
+            if TABLE_MATRIX[row][column] in ["K", "k"] and matrix_to_piece[(row, column)].names == names_player:
+                king_player_position = (row, column)
+                break
+    for row in range(8):
+        for column in range(8):
+            if TABLE_MATRIX[row][column] in ["K", "k"] and matrix_to_piece[(row, column)].names == names_opponent:
+                king_opponent_position = (row, column)
+                break
+    '''if player_to_move == "p":
+        for piece in pieces_player:
+            for square in piece.available_squares:
+                (piece_prev_row, piece_prev_column) = (piece.row, piece.column)
+                piece.make_move(square)
+                # update available square for other player for simulated state
+                # also dont damage real pieces
+                for piece2 in pieces_opponent:
+                    piece2.update_available_squares()
+                    # king can be captured afterwards, remove that square from availables
+                    if king_player_position in piece2.capturing_squares:
+                        piece.available_squares.remove(square)
+                        if square in piece.capturing_squares:
+                            piece.capturing_squares.remove(square)
+                # undo the simulated move
+                piece.make_move((piece_prev_row, piece_prev_column))
+                for piece2 in pieces_opponent:
+                    piece2.update_available_squares()
+    
+    else:
+        for piece in pieces_opponent:
+            for square in piece.available_squares:
+                (piece_prev_row, piece_prev_column) = (piece.row, piece.column)
+                piece.make_move(square)
+                # update available square for other player for simulated state
+                # also dont damage real pieces
+                for piece2 in pieces_player:
+                    piece2.update_available_squares()
+                    # king can be captured afterwards, remove that square from availables
+                    if king_opponent_position in piece2.capturing_squares:
+                        piece.available_squares.remove(square)
+                        if square in piece.capturing_squares:
+                            piece.capturing_squares.remove(square)
+                # undo the simulated move
+                piece.make_move((piece_prev_row, piece_prev_column))
+                for piece2 in pieces_player:
+                    piece2.update_available_squares()'''
+            
 
 def scan_fen():
     # table is seen from whites perspective
@@ -255,7 +309,8 @@ class Piece(pygame.sprite.Sprite):
     
     # initializes pairs of (row, column) coordinates of available squares after every move for a current piece
     def update_available_squares(self):
-        self.available_squares = []
+        self.available_squares = [] # also containts capturing squares
+        self.capturing_squares = []
 
         if self.name == 'P' or self.name == 'p':
             # pawns only go forward
@@ -284,16 +339,19 @@ class Piece(pygame.sprite.Sprite):
                                 column = 7 - (ord(ep_square[0]) - ord("a"))
                             if self.row == row + 1 and (self.column == column - 1 or self.column == column + 1):
                                 self.available_squares.append((row, column))
+                                self.capturing_squares.append((row, column))
 
 
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row - 1][self.column - 1]
                         if capture_left not in names_player and capture_left != '.':
                             self.available_squares.append((self.row - 1, self.column - 1))
+                            self.capturing_squares.append((self.row - 1, self.column - 1))
                     if self.column + 1 < 8:
                         capture_right = TABLE_MATRIX[self.row - 1][self.column + 1]
                         if capture_right not in names_player and capture_right != '.':
                             self.available_squares.append((self.row - 1, self.column + 1))
+                            self.capturing_squares.append((self.row - 1, self.column + 1))
             else:
                 next_row = self.row + 1
                 if next_row <= 7:
@@ -319,15 +377,19 @@ class Piece(pygame.sprite.Sprite):
                                 column = 7 - (ord(ep_square[0]) - ord("a"))
                             if self.row == row - 1 and (self.column == column - 1 or self.column == column + 1):
                                 self.available_squares.append((row, column))
+                                self.capturing_squares.append((row, column))
                             
                     if self.column - 1 >= 0:
                         capture_left = TABLE_MATRIX[self.row + 1][self.column - 1]
                         if capture_left not in names_opponent and capture_left != '.':
                             self.available_squares.append((self.row + 1, self.column - 1))
+                            self.capturing_squares.append((self.row + 1, self.column - 1))
+
                     if self.column + 1 < 8:
                         capture_right = TABLE_MATRIX[self.row + 1][self.column + 1]
                         if capture_right not in names_opponent and capture_right != '.':
                             self.available_squares.append((self.row + 1, self.column + 1))
+                            self.capturing_squares.append((self.row + 1, self.column + 1))
 
         if self.name == 'N' or self.name == 'n':
             # x, y offsets where knight can possibly jump to
@@ -339,6 +401,8 @@ class Piece(pygame.sprite.Sprite):
                 # checking bounds and availability for every jumping square
                 if 0 <= try_row <= 7 and 0 <= try_column <= 7 and TABLE_MATRIX[try_row][try_column] not in self.names:
                     self.available_squares.append((try_row, try_column))
+                    if TABLE_MATRIX[try_row][try_column] != '.':
+                        self.capturing_squares.append((try_row, try_column))
         
         if self.name == "B" or self.name == 'b':
             # up left
@@ -350,6 +414,7 @@ class Piece(pygame.sprite.Sprite):
                 # if current square is not player's and its not a dot -> its capturing square, break after
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row -= 1
@@ -362,6 +427,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row -= 1
@@ -374,6 +440,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row += 1
@@ -386,6 +453,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row += 1
@@ -399,6 +467,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row -= 1
@@ -410,6 +479,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row += 1
@@ -421,6 +491,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_column -= 1
@@ -432,6 +503,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_column += 1
@@ -447,6 +519,7 @@ class Piece(pygame.sprite.Sprite):
                 # if current square is not player's and its not a dot -> its capturing square, break after
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row -= 1
@@ -459,6 +532,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row -= 1
@@ -471,6 +545,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row += 1
@@ -483,6 +558,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row += 1
@@ -495,6 +571,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row -= 1
@@ -506,6 +583,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_row += 1
@@ -517,6 +595,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_column -= 1
@@ -528,6 +607,7 @@ class Piece(pygame.sprite.Sprite):
             while 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 if TABLE_MATRIX[curr_row][curr_column] != '.':
                     self.available_squares.append((curr_row, curr_column))
+                    self.capturing_squares.append((curr_row, curr_column))
                     break
                 self.available_squares.append((curr_row, curr_column))
                 curr_column += 1
@@ -655,9 +735,12 @@ class Piece(pygame.sprite.Sprite):
         (row_try, column_try) = self.calc_position_matrix(self.rect_square.center)
         return (row_try, column_try) in self.available_squares
     
-    def make_move(self):
+    def make_move(self, square=None):
+
+        global TABLE_MATRIX, matrix_to_piece
         # mark previous square as available
         TABLE_MATRIX[self.row][self.column] = '.'
+        matrix_to_piece[(self.row, self.column)] = None
 
         # if it was king or a rook, disable castling rights by alerting that either moved
         if self.name in ["K", "k", "R", "r"]:
@@ -690,40 +773,41 @@ class Piece(pygame.sprite.Sprite):
         prev_row = self.row
         prev_column = self.column
 
-        (self.row, self.column) = self.calc_position_matrix(self.rect_square.center)
+        # if the moving square is not explicitely passed as an argument, catch the mouse position
+        (self.row, self.column) = self.calc_position_matrix(self.rect_square.center) if square is None else square
 
         # handle castling by checking if king somehow "moved" two squares
         if self.name in ["K", "k"]:
             # left castling
             if self.column + 2 == prev_column:
-                ((rook_prev_x, rook_prev_y), (rook_curr_x, rook_curr_y)) = ((self.row, 0), (self.row, self.column + 1))
+                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 0), (self.row, self.column + 1))
 
-                rook = matrix_to_piece[(rook_prev_x, rook_prev_y)]
+                rook = matrix_to_piece[(rook_prev_row, rook_prev_column)]
                 # updating rooks current square
-                rook.rect.center = rook.calc_position_screen(rook_curr_x, rook_curr_y)
+                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
                 rook.rect_square.center = rook.rect.center
                 (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                TABLE_MATRIX[rook_curr_x][rook_curr_y] = rook.name
-                matrix_to_piece[(rook_curr_x, rook_curr_y)] = rook
+                TABLE_MATRIX[rook_curr_row][rook_curr_column] = rook.name
+                matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
                 # updating rooks previous square
-                TABLE_MATRIX[rook_prev_x][rook_prev_y] = '.'
-                matrix_to_piece[(rook_prev_x, rook_curr_y)] = None
+                TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
+                matrix_to_piece[(rook_prev_row, rook_curr_column)] = None
                 rook.update_available_squares()
 
             # right castling
             if prev_column + 2 == self.column:
-                ((rook_prev_x, rook_prev_y), (rook_curr_x, rook_curr_y)) = ((self.row, 7), (self.row, self.column - 1))
+                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 7), (self.row, self.column - 1))
 
-                rook = matrix_to_piece[(rook_prev_x, rook_prev_y)]
+                rook = matrix_to_piece[(rook_prev_row, rook_prev_column)]
                 # updating rooks current square
-                rook.rect.center = rook.calc_position_screen(rook_curr_x, rook_curr_y)
+                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
                 rook.rect_square.center = rook.rect.center
                 (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                TABLE_MATRIX[rook_curr_x][rook_curr_y] = rook.name
-                matrix_to_piece[(rook_curr_x, rook_curr_y)] = rook
+                TABLE_MATRIX[rook_curr_row][rook_curr_column] = rook.name
+                matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
                 # updating rooks previous square
-                TABLE_MATRIX[rook_prev_x][rook_prev_y] = '.'
-                matrix_to_piece[(rook_prev_x, rook_curr_y)] = None
+                TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
+                matrix_to_piece[(rook_prev_row, rook_curr_column)] = None
                 rook.update_available_squares()
 
         # mark en passant square
@@ -758,8 +842,9 @@ class Piece(pygame.sprite.Sprite):
         if TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
             halfmoves = 0
             captured_piece = matrix_to_piece[((self.row, self.column))]
-            captured_piece.kill()
-            matrix_to_piece[(self.row, self.column)] = None
+            if square is None:
+                captured_piece.kill()
+                matrix_to_piece[(self.row, self.column)] = None
         
         # if its not a pawn move nor a capture, increment halfmoves
         if not self.name in ["P", "p"] and not TABLE_MATRIX[self.row][self.column] != '.':
@@ -795,20 +880,18 @@ class Piece(pygame.sprite.Sprite):
                     row -= 1
 
         # next player
-        global player_to_move
-        if player_to_move == "p":
-            player_to_move = "o"
-        else:
-            player_to_move = "p"
+        if square is None:
+            global player_to_move
+            if player_to_move == "p":
+                player_to_move = "o"
+            else:
+                player_to_move = "p"
         
         # update fen history
-        if not promoting:
+        if not promoting and square is None:
             scan_fen()
             print(fen[-1])
-        enpassant_square = "-"
-
-        # update squares for every piece
-        update_available_squares()
+            enpassant_square = "-"
 
     def handle_event(self, event):
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
@@ -858,6 +941,8 @@ class Piece(pygame.sprite.Sprite):
                     self.holding = False
                     self.unselecting_downclick = False
                     self.make_move()
+                    # update squares for every piece
+                    update_available_squares()
                     return
                 else:
                     self.rect.center = self.calc_position_screen(self.row, self.column)
@@ -873,6 +958,8 @@ class Piece(pygame.sprite.Sprite):
                 # Align the piece to the closest square if move is legal
                 if self.available_move():
                     self.make_move()
+                    # update squares for every piece
+                    update_available_squares()
                 else: # else reset the piece to the current position
                     self.rect.center = self.calc_position_screen(self.row, self.column)
                     self.rect_square.center = self.rect.center
