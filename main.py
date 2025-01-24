@@ -48,8 +48,6 @@ for i in range(8):
 # fen code, list of strings where every string describes one position
 fen = []
 
-# flipped indicates player is black
-flipped = False
 enpassant_square = "-"
 halfmoves = 0
 fullmoves = 0
@@ -81,63 +79,13 @@ def render_text(s, x, y, font_size):
 # updates available squares after every move for each piece
 def update_available_squares():
     # updating available squares first pass (no filtering pins and checks)
-    if player_to_move == "p":
-        for piece in pieces_player:
-            piece.update_available_squares()
-    else:
-        for piece in pieces_opponent:
-            piece.update_available_squares()
-    
-    king_player_position = king_opponent_position = ()
-    # finding both kings
-    for row in range(8):
-        for column in range(8):
-            if TABLE_MATRIX[row][column] in ["K", "k"] and matrix_to_piece[(row, column)].names == names_player:
-                king_player_position = (row, column)
-                break
-    for row in range(8):
-        for column in range(8):
-            if TABLE_MATRIX[row][column] in ["K", "k"] and matrix_to_piece[(row, column)].names == names_opponent:
-                king_opponent_position = (row, column)
-                break
-    '''if player_to_move == "p":
-        for piece in pieces_player:
-            for square in piece.available_squares:
-                (piece_prev_row, piece_prev_column) = (piece.row, piece.column)
-                piece.make_move(square)
-                # update available square for other player for simulated state
-                # also dont damage real pieces
-                for piece2 in pieces_opponent:
-                    piece2.update_available_squares()
-                    # king can be captured afterwards, remove that square from availables
-                    if king_player_position in piece2.capturing_squares:
-                        piece.available_squares.remove(square)
-                        if square in piece.capturing_squares:
-                            piece.capturing_squares.remove(square)
-                # undo the simulated move
-                piece.make_move((piece_prev_row, piece_prev_column))
-                for piece2 in pieces_opponent:
-                    piece2.update_available_squares()
-    
-    else:
-        for piece in pieces_opponent:
-            for square in piece.available_squares:
-                (piece_prev_row, piece_prev_column) = (piece.row, piece.column)
-                piece.make_move(square)
-                # update available square for other player for simulated state
-                # also dont damage real pieces
-                for piece2 in pieces_player:
-                    piece2.update_available_squares()
-                    # king can be captured afterwards, remove that square from availables
-                    if king_opponent_position in piece2.capturing_squares:
-                        piece.available_squares.remove(square)
-                        if square in piece.capturing_squares:
-                            piece.capturing_squares.remove(square)
-                # undo the simulated move
-                piece.make_move((piece_prev_row, piece_prev_column))
-                for piece2 in pieces_player:
-                    piece2.update_available_squares()'''
-            
+    global pieces_player, pieces_opponent
+    for piece in pieces_player:
+        piece.update_available_squares()
+        if piece.name in ["K", "k"]:
+            king_player = (piece.row, piece.column)
+    for piece in pieces_opponent:
+        piece.update_available_squares()
 
 def scan_fen():
     # table is seen from whites perspective
@@ -192,6 +140,133 @@ def scan_fen():
     # remove first slash
     curr_fen = curr_fen[1:]
     fen.append(curr_fen)
+
+def convert_fen(fen_string):
+    # first destroy everything
+    global TABLE_MATRIX, matrix_to_piece, pieces_player, pieces_opponent, halfmoves, fullmoves, player_to_move, player_color, K, Q, k, q
+    for i in range(8):
+        TABLE_MATRIX.append(['.'] * 8)
+    for row in range(0, 8):
+        for column in range(0, 8):
+            if matrix_to_piece[(row, column)] is not None:
+                matrix_to_piece[(row, column)].kill()
+            matrix_to_piece[(row, column)] = None
+    pieces_player = pygame.sprite.Group()
+    pieces_opponent = pygame.sprite.Group()
+
+    data = fen_string.split("/")
+
+    if player_color == "w":
+        for row in range(7):
+            column = 0
+            for c in data[row]:
+                if c.isnumeric():
+                    column += int(c)
+                    continue
+                elif c.isupper():
+                    # white piece
+                    piece = Piece(c, pygame.image.load(route_player + f"{c}.png"), row, column, names_player)
+                    pieces_player.add(piece)
+                    TABLE_MATRIX[row][column] = c
+                    matrix_to_piece[(row, column)] = piece
+                    column += 1
+                elif c.islower():
+                    # black piece
+                    piece = Piece(c, pygame.image.load(route_opponent + f"{c}.png"), row, column, names_opponent)
+                    pieces_opponent.add(piece)
+                    TABLE_MATRIX[row][column] = c
+                    matrix_to_piece[(row, column)] = piece
+                    column += 1
+
+        last_row_and_rest = data[-1].split(" ", 1) # split only once
+        (last_row, rest) = (last_row_and_rest[0], last_row_and_rest[1])
+        row = 7
+        column = 0
+        for c in last_row:
+            if c.isnumeric():
+                column += int(c)
+                continue
+            elif c.isupper():
+                # white piece
+                piece = Piece(c, pygame.image.load(route_player + f"{c}.png"), row, column, names_player)
+                pieces_player.add(piece)
+                TABLE_MATRIX[row][column] = c
+                matrix_to_piece[(row, column)] = piece
+                column += 1
+            elif c.islower():
+                # black piece
+                piece = Piece(c, pygame.image.load(route_opponent + f"{c}.png"), row, column, names_opponent)
+                pieces_opponent.add(piece)
+                TABLE_MATRIX[row][column] = c
+                matrix_to_piece[(row, column)] = piece
+                column += 1
+    else:
+        for row in range(7):
+            column = 7
+            for c in data[row]:
+                if c.isnumeric():
+                    column -= int(c)
+                    continue
+                elif c.isupper():
+                    # white piece
+                    piece = Piece(c, pygame.image.load(route_opponent + f"{c}.png"), 7 - row, column, names_opponent)
+                    pieces_opponent.add(piece)
+                    TABLE_MATRIX[7 - row][column] = c
+                    matrix_to_piece[(7 - row, column)] = piece
+                    column -= 1
+                elif c.islower():
+                    # black piece
+                    piece = Piece(c, pygame.image.load(route_player + f"{c}.png"), 7 - row, column, names_player)
+                    pieces_player.add(piece)
+                    TABLE_MATRIX[7 - row][column] = c
+                    matrix_to_piece[(7 - row, column)] = piece
+                    column -= 1
+
+        last_row_and_rest = data[-1].split(" ", 1) # split only once
+        (last_row, rest) = (last_row_and_rest[0], last_row_and_rest[1])
+        row = 7
+        column = 7
+        for c in last_row:
+            if c.isnumeric():
+                column -= int(c)
+                continue
+            elif c.isupper():
+                # white piece
+                piece = Piece(c, pygame.image.load(route_opponent + f"{c}.png"), 7 - row, column, names_opponent)
+                pieces_opponent.add(piece)
+                TABLE_MATRIX[7 - row][column] = c
+                matrix_to_piece[(7 - row, column)] = piece
+                column -= 1
+            elif c.islower():
+                # black piece
+                piece = Piece(c, pygame.image.load(route_player + f"{c}.png"), 7 - row, column, names_player)
+                pieces_player.add(piece)
+                TABLE_MATRIX[7 - row][column] = c
+                matrix_to_piece[(7 - row, column)] = piece
+                column -= 1
+    
+    data = rest.split(" ")
+    (mover, castling_rights, ep_square, halfmoves, fullmoves) = (data[0], data[1], data[2], int(data[3]), int(data[4]))
+
+    if player_color == "w":
+        if mover == "w":
+            player_to_move = "p"
+        else:
+            player_to_move = "o"
+    else:
+        if mover == "w":
+            player_to_move = "o"
+        else:
+            player_to_move = "p"
+    
+    if castling_rights == "-":
+        K = Q = k = q = False
+    else:
+        for right in castling_rights:
+            if right == "K": K = True
+            if right == "k": k = True
+            if right == "Q": Q = True
+            if right == "q": q = True
 
 # calculates new dimensions based on initial ones which are 450*975
 # handles rescalling while keeping aspect ratio
@@ -290,8 +365,8 @@ class Piece(pygame.sprite.Sprite):
         # needed for castling
         self.moved = False
 
-        # when initializing a piece, call only self method
-        self.update_available_squares()
+        self.available_squares = []
+        self.capturing_squares = []
     
     # caluclates screen position of a piece based on matrix position
     def calc_position_screen(self, row, column):
@@ -331,7 +406,7 @@ class Piece(pygame.sprite.Sprite):
                     if len(fen) > 0:
                         ep_square = fen[-1].split(" ")[-3]
                         if ep_square != "-":
-                            if not flipped:
+                            if player_color == "w" :
                                 row = 7 - (int(ep_square[1]) - 1)
                                 column = ord(ep_square[0]) - ord("a")
                             else:
@@ -369,7 +444,7 @@ class Piece(pygame.sprite.Sprite):
                     if len(fen) > 0:
                         ep_square = fen[-1].split(" ")[-3]
                         if ep_square != "-":
-                            if not flipped:
+                            if player_color == "w":
                                 row = 7 - (int(ep_square[1]) - 1)
                                 column = ord(ep_square[0]) - ord("a")
                             else:
@@ -828,11 +903,13 @@ class Piece(pygame.sprite.Sprite):
                 halfmoves = 0
                 captured_piece = matrix_to_piece[((self.row + 1, self.column))]
                 captured_piece.kill()
+                TABLE_MATRIX[self.row + 1][self.column] = '.'
                 matrix_to_piece[(self.row, self.column)] = None
             if TABLE_MATRIX[self.row - 1][self.column] in ["P", "p"]:
                 halfmoves = 0
                 captured_piece = matrix_to_piece[((self.row - 1, self.column))]
                 captured_piece.kill()
+                TABLE_MATRIX[self.row - 1][self.column] = '.'
                 matrix_to_piece[(self.row, self.column)] = None
 
         self.rect.center = self.calc_position_screen(self.row, self.column)
@@ -842,6 +919,21 @@ class Piece(pygame.sprite.Sprite):
         if TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
             halfmoves = 0
             captured_piece = matrix_to_piece[((self.row, self.column))]
+            # disable capturing when rook gets taken
+            if not self.moved:
+                if captured_piece.name == "R":
+                    # check king side by comparing distance to the king
+                    if (0 <= captured_piece.column + 3 <= 7 and TABLE_MATRIX[captured_piece.row][captured_piece.column + 3] == "K") or (0 <= captured_piece.column - 3 <= 7 and TABLE_MATRIX[captured_piece.row][captured_piece.column - 3] == "K"):
+                        K = False
+                    else:
+                        Q = False
+
+                elif captured_piece.name == "r":
+                    # check king side by comparing distance to the king
+                    if (0 <= captured_piece.column + 3 <= 7 and TABLE_MATRIX[captured_piece.row][captured_piece.column + 3] == "k") or (0 <= captured_piece.column - 3 <= 7 and TABLE_MATRIX[captured_piece.row][captured_piece.column - 3] == "k"):
+                        k = False
+                    else:
+                        q = False
             if square is None:
                 captured_piece.kill()
                 matrix_to_piece[(self.row, self.column)] = None
@@ -1083,8 +1175,12 @@ while 1:
     clock.tick(60)
 
 # SETTING PIECES UP
+# real pieces in real time
 pieces_player = pygame.sprite.Group()
 pieces_opponent = pygame.sprite.Group()
+# pieces while simulating and etc...
+pieces_player_sim = pygame.sprite.Group()
+pieces_opponent_sim = pygame.sprite.Group()
 
 # assuming player is white
 names_player = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
@@ -1096,38 +1192,15 @@ if player_color == "b":
     names_player = ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p', 'r', 'n', 'b', 'k', 'q', 'b', 'n', 'r']
     names_opponent = [piece.upper() for piece in names_player]
     (route_player, route_opponent) = (route_opponent, route_player)
-    # treat table as flipped
-    flipped = True
 
-# initializing piece by piece, and a position matrix
-row = 6
-column = 0
-for name in names_player:
-    if column == 8:
-        column = 0
-    if name != names_player[0]: # done with pawns
-        row = 7
-    piece = Piece(name, pygame.image.load(route_player + f"{name}.png"), row, column, names_player)
-    pieces_player.add(piece)
-    TABLE_MATRIX[row][column] = name
-    matrix_to_piece[(row, column)] = piece
-    column += 1
-
-row = 1
-column = 0
-for name in names_opponent:
-    if column == 8:
-        column = 0
-    if name != names_opponent[0]: # done with pawns
-        row = 0
-    piece = Piece(name, pygame.image.load(route_opponent + f"{name}.png"), row, column, names_opponent)
-    pieces_opponent.add(piece)
-    TABLE_MATRIX[row][column] = name
-    matrix_to_piece[(row, column)] = piece
-    column += 1
+fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+fen_start = "rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3" # bishop pinning the knight
+#fen_start = "r1bqkbnr/ppppp1pp/2n5/4Pp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3" # en passant possible
+#fen_start = "r1bqkbnr/ppppp1pp/2n5/4Pp2/8/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 4" # en passant not possible
+fen.append(fen_start)
+convert_fen(fen_start)
 
 update_available_squares()
-scan_fen()
 print(fen[-1])
 
 # game loop
