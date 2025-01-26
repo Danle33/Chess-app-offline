@@ -160,7 +160,7 @@ def update_available_squares():
             piece.available_squares = copy.deepcopy(available_squares_new)
 
             available_squares_new = set()
-            for square in piece.available_squares:
+            for square in piece.attacking_squares:
                 square_orig = (piece.row, piece.column)
                 simulate_move((piece.row, piece.column), square)
                 (piece.row, piece.column) = square
@@ -196,7 +196,7 @@ def update_available_squares():
             piece.available_squares = copy.deepcopy(available_squares_new)
 
             available_squares_new = set()
-            for square in piece.available_squares:
+            for square in piece.attacking_squares:
                 square_orig = (piece.row, piece.column)
                 simulate_move((piece.row, piece.column), square)
                 (piece.row, piece.column) = square
@@ -1388,6 +1388,7 @@ fen_start = "6k1/8/4B3/8/6R1/8/8/6K1 b - - 0 1" # double check
 fen_start = "3k4/8/8/1q6/3B4/8/5n2/3R2K1 w - - 0 1" # double check 2
 fen_start = "8/4k3/8/2q5/8/8/5n2/4R1K1 b - - 1 3" # counter check
 fen_start = "8/1QP3k1/8/8/2q5/8/8/6K1 w - - 0 1" #promotion with check
+fen_start = "8/8/4k3/8/8/5K2/8/8 w - - 0 1" # only 2 kings
 fen.append(fen_start)
 convert_fen(fen_start)
 
