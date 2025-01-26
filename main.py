@@ -149,28 +149,17 @@ def update_available_squares():
             available_squares_new = set()
             for square in piece.available_squares:
                 square_orig = (piece.row, piece.column)
-                simulate_move((piece.row, piece.column), square)
+                simulate_move(square_orig, square)
+                #print_table_state()
                 (piece.row, piece.column) = square
                 for piece2 in pieces_opponent:
                     piece2.update_available_squares()
-                if not in_check(True):
+                if not in_check():
                     available_squares_new.add(square)
                 TABLE_MATRIX = copy.deepcopy(TABLE_MATRIX_ORIGINAL)
                 (piece.row, piece.column) = square_orig
             piece.available_squares = copy.deepcopy(available_squares_new)
-
-            available_squares_new = set()
-            for square in piece.attacking_squares:
-                square_orig = (piece.row, piece.column)
-                simulate_move((piece.row, piece.column), square)
-                (piece.row, piece.column) = square
-                for piece2 in pieces_opponent:
-                    piece2.update_available_squares()
-                if not in_check(True):
-                    available_squares_new.add(square)
-                TABLE_MATRIX = copy.deepcopy(TABLE_MATRIX_ORIGINAL)
-                (piece.row, piece.column) = square_orig
-            piece.attacking_squares = copy.deepcopy(available_squares_new)
+            piece.attacking_squares = copy.deepcopy(piece.available_squares)
         
         for piece in pieces_opponent:
             piece.update_available_squares()
@@ -185,28 +174,16 @@ def update_available_squares():
             available_squares_new = set()
             for square in piece.available_squares:
                 square_orig = (piece.row, piece.column)
-                simulate_move((piece.row, piece.column), square)
+                simulate_move(square_orig, square)
                 (piece.row, piece.column) = square
                 for piece2 in pieces_player:
                     piece2.update_available_squares()
-                if not in_check(False):
+                if not in_check():
                     available_squares_new.add(square)
                 TABLE_MATRIX = copy.deepcopy(TABLE_MATRIX_ORIGINAL)
                 (piece.row, piece.column) = square_orig
             piece.available_squares = copy.deepcopy(available_squares_new)
-
-            available_squares_new = set()
-            for square in piece.attacking_squares:
-                square_orig = (piece.row, piece.column)
-                simulate_move((piece.row, piece.column), square)
-                (piece.row, piece.column) = square
-                for piece2 in pieces_player:
-                    piece2.update_available_squares()
-                if not in_check(False):
-                    available_squares_new.add(square)
-                TABLE_MATRIX = copy.deepcopy(TABLE_MATRIX_ORIGINAL)
-                (piece.row, piece.column) = square_orig
-            piece.attacking_squares = copy.deepcopy(available_squares_new)
+            piece.attacking_squares = copy.deepcopy(piece.available_squares)
         
         for piece in pieces_player:
             piece.update_available_squares()
@@ -225,7 +202,7 @@ def mark_check():
                 break
         
         for piece in pieces_opponent:
-            if (king.row, king.column) in piece.attacking_squares:
+            if (king.row, king.column) in piece.available_squares:
                 rect_check_square.center = king.calc_position_screen(king.row, king.column)
                 return
     else:
@@ -235,14 +212,14 @@ def mark_check():
                 break
         
         for piece in pieces_player:
-            if (king.row, king.column) in piece.attacking_squares:
+            if (king.row, king.column) in piece.available_squares:
                 rect_check_square.center = king.calc_position_screen(king.row, king.column)
                 return
     
     rect_check_square.center = (-1, -1)
 
-def in_check(player):
-    if player:
+def in_check():
+    if player_to_move == "p":
         for piece in pieces_player:
             if piece.name in ["K", "k"]:
                 king = piece
@@ -252,7 +229,7 @@ def in_check(player):
             # while simulating, maybe piece giving a check is overwritten in a TABLE_MATRIX
             if TABLE_MATRIX[piece.row][piece.column] not in names_opponent:
                 continue
-            if (king.row, king.column) in piece.attacking_squares:
+            if (king.row, king.column) in piece.available_squares:
                 return True
         return False
     
@@ -265,9 +242,40 @@ def in_check(player):
         for piece in pieces_player:
             if TABLE_MATRIX[piece.row][piece.column] not in names_player:
                 continue
-            if (king.row, king.column) in piece.attacking_squares:
+            if (king.row, king.column) in piece.available_squares:
                 return True
         return False
+
+def checkmated():
+    if player_to_move == "p":
+        for piece in pieces_player:
+            if len(piece.available_squares) > 0:
+                return False
+        if in_check():
+            return True
+    else:
+        for piece in pieces_opponent:
+            if len(piece.available_squares) > 0:
+                return False
+        if in_check():
+            return True
+
+def stalemated():
+    if player_to_move == "p":
+        for piece in pieces_player:
+            if len(piece.available_squares) > 0:
+                return False
+        if not in_check():
+            return True
+    else:
+        for piece in pieces_opponent:
+            if len(piece.available_squares) > 0:
+                return False
+        if not in_check():
+            return True
+
+def insufficient_material():
+    pass
 
 def scan_fen():
     # table is seen from whites perspective
@@ -869,7 +877,7 @@ class Piece(pygame.sprite.Sprite):
                         attacked_squares.add(square)
 
             # handle castling
-            if not self.moved and not in_check(player_to_move == "p"):
+            if not self.moved and not in_check():
                 # king is on the starting position
 
                 # left castling
@@ -908,56 +916,56 @@ class Piece(pygame.sprite.Sprite):
             curr_row = self.row - 1
             curr_column = self.column - 1
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
             
             # up right
             curr_row = self.row - 1
             curr_column = self.column + 1
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
             
             # down left
             curr_row = self.row + 1
             curr_column = self.column - 1
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
             
             # down right
             curr_row = self.row + 1
             curr_column = self.column + 1
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
             
             # up
             curr_row = self.row - 1
             curr_column = self.column
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
             
             # down
             curr_row = self.row + 1
             curr_column = self.column
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
             
             # left
             curr_row = self.row
             curr_column = self.column - 1
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
             
             # right
             curr_row = self.row
             curr_column = self.column + 1
 
-            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names and not (curr_row, curr_column) in attacked_squares:
+            if 0 <= curr_row <= 7 and 0 <= curr_column <= 7 and TABLE_MATRIX[curr_row][curr_column] not in self.names:
                 self.available_squares.add((curr_row, curr_column))
 
         if self.name not in ["P", "p"]:
@@ -1388,7 +1396,8 @@ fen_start = "6k1/8/4B3/8/6R1/8/8/6K1 b - - 0 1" # double check
 fen_start = "3k4/8/8/1q6/3B4/8/5n2/3R2K1 w - - 0 1" # double check 2
 fen_start = "8/4k3/8/2q5/8/8/5n2/4R1K1 b - - 1 3" # counter check
 fen_start = "8/1QP3k1/8/8/2q5/8/8/6K1 w - - 0 1" #promotion with check
-fen_start = "8/8/4k3/8/8/5K2/8/8 w - - 0 1" # only 2 kings
+fen_start = "8/8/4k3/8/8/5K2/8/8 w - - 0 1" # only 2 kings'''
+fen_start = "8/8/4k3/8/4K3/8/8/8 b - - 1 1" # kings in opposition
 fen.append(fen_start)
 convert_fen(fen_start)
 
@@ -1438,6 +1447,13 @@ while 1:
 
         for piece in pieces_promotion:
             piece.handle_event_promotion(event)
+    
+    if checkmated():
+        print("cekmejt")
+        break
+    if stalemated():
+        print("stelmejlt")
+        break
 
     pygame.display.flip()
     clock.tick(60)
