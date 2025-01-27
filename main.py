@@ -10,8 +10,12 @@ pygame.init()
 WIDTH = 450
 HEIGHT = 975
 
-TABLE_X = 0
-TABLE_Y = HEIGHT / 2 - WIDTH / 2
+# screen moves when in settings
+SCREEN_OFFSET_X = 0
+SCREEN_OFFSET_Y = 0
+
+TABLE_X = SCREEN_OFFSET_X
+TABLE_Y = HEIGHT / 2 - WIDTH / 2 + SCREEN_OFFSET_Y
 
 #colors
 WHITE = (255, 255, 255)
@@ -100,6 +104,37 @@ def render_text(s, x, y, font_size, top_left=False, color=WHITE):
     else:
         rect_text.center = (x, y)
     screen.blit(text_surface, rect_text)
+
+def render_gameplay():
+    if rect_moving_square_prev.center != (-1, -1):
+        screen.blit(moving_square_prev, rect_moving_square_prev)
+        screen.blit(moving_square_curr, rect_moving_square_curr)
+    
+    if rect_check_square.center != (-1, -1):
+        screen.blit(check_square, rect_check_square)
+
+    pieces_player.draw(screen)
+    pieces_opponent.draw(screen)
+
+    # rendering off table stuff
+    screen.blit(image_unknown_user, rect_image_player)
+    screen.blit(image_unknown_user, rect_image_opponent)
+
+    render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
+    render_text("(3500)", SCREEN_OFFSET_X + f(140), rect_image_player.top + f(1), int(f(14)), True, GRAY)
+    render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
+    render_text("(987)", SCREEN_OFFSET_X  + f(140), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
+
+    screen.blit(image_flag_player, rect_flag_player)
+    screen.blit(image_flag_opponent, rect_flag_opponent)
+
+    clock_player.draw()
+    clock_opponent.draw()
+
+    if promoting:
+        # darken the screen
+        screen.blit(dark_overlay, (TABLE_X, TABLE_Y))
+        pieces_promotion.draw(screen)
 
 def simulate_move(square1, square2):
     (prev_row, prev_column) = square1
@@ -1196,7 +1231,6 @@ class Piece(pygame.sprite.Sprite):
         # update fen history
         if not promoting:
             scan_fen()
-            
             enpassant_square = "-"
 
     def handle_event(self, event):
@@ -1284,7 +1318,7 @@ class Piece(pygame.sprite.Sprite):
 
         if self.dragging and self.selected:
             # Update the position of the piece while dragging
-            curr_x = max(mouse_x, self.rect.size[0] / 2)
+            curr_x = max(mouse_x, SCREEN_OFFSET_X + self.rect.size[0] / 2)
             curr_x = min(curr_x, WIDTH - self.rect.size[0] / 2)
             curr_y = max(mouse_y, TABLE_Y + self.rect.size[1] / 2)
             curr_y = min(curr_y, TABLE_Y + 8 * SQUARE_SIZE - self.rect.size[1] / 2)
@@ -1323,10 +1357,21 @@ class Piece(pygame.sprite.Sprite):
             scan_fen()
             
             update_available_squares()
+            set_game_end_reason()
+            mark_check()
+
+class Clock(pygame.sprite.Sprite):
+    def __init__(self, minutes, increment, x, y):
+        super().__init__()
+        self.minutes = minutes
+        self.increment = increment
+        self.rect = pygame.Rect(x, y, SQUARE_SIZE * 2, SQUARE_SIZE * 0.7)
+    def draw(self):
+        pygame.draw.rect(screen, WHITE, self.rect, width=int(f(1)))
 
 # background image
-image_bg = pygame.image.load("Assets/dark/backgrounds/background dark 1.png")
-image_bg = pygame.transform.scale(image_bg, (WIDTH, HEIGHT))
+image_bg = pygame.image.load("Assets/dark/backgrounds/boje1.png")
+image_bg = pygame.transform.scale(image_bg, (WIDTH*1.1, HEIGHT*1.1))
 
 # table
 image_table = pygame.image.load("Assets/dark/boards/tiles.png")
@@ -1342,6 +1387,7 @@ slider2 = Slider(f(400))
 route_player = "Assets/dark/pieces white/"
 route_opponent = "Assets/dark/pieces black/"
 
+# kings images home screen
 image_K = pygame.image.load(route_player + "K.png")
 image_K = pygame.transform.scale(image_K, (f(100), f(100)))
 rect_K = image_K.get_rect()
@@ -1374,7 +1420,7 @@ while 1:
     if game_started:
         break
 
-    screen.blit(image_bg, (0, 0))
+    screen.blit(image_bg, (0-f(15), 0-f(15)))
 
     screen.blit(image_K, rect_K)
     screen.blit(image_k, rect_k)
@@ -1392,6 +1438,8 @@ while 1:
     pygame.display.flip()
     clock.tick(60)
 
+screen.fill(BLACKY)
+
 # SETTING PIECES UP
 # real pieces in real time
 pieces_player = pygame.sprite.Group()
@@ -1400,9 +1448,22 @@ pieces_opponent = pygame.sprite.Group()
 image_unknown_user = pygame.image.load("Assets/dark/users/unknown user.png")
 image_unknown_user = pygame.transform.smoothscale(image_unknown_user, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7 * 93 / 97))
 rect_image_player = image_unknown_user.get_rect()
-rect_image_player.topleft = (f(10), TABLE_Y + 8 * SQUARE_SIZE + f(15))
+rect_image_player.topleft = (SCREEN_OFFSET_X + f(10), TABLE_Y + 8 * SQUARE_SIZE + f(15))
 rect_image_opponent = image_unknown_user.get_rect()
-rect_image_opponent.bottomleft = (f(10), TABLE_Y - f(15))
+rect_image_opponent.bottomleft = (SCREEN_OFFSET_X  + f(10), TABLE_Y - f(15))
+
+image_flag_player = pygame.image.load("Assets/shared/flags/64/unknown.png")
+image_flag_player = pygame.transform.scale(image_flag_player, (f(20), f(20)))
+rect_flag_player = image_flag_player.get_rect()
+rect_flag_player.topleft = (SCREEN_OFFSET_X + f(203), rect_image_player.top)
+
+image_flag_opponent = pygame.image.load("Assets/shared/flags/64/unknown.png")
+image_flag_opponent = pygame.transform.scale(image_flag_opponent, (f(20), f(20)))
+rect_flag_opponent = image_flag_opponent.get_rect()
+rect_flag_opponent.topleft = (SCREEN_OFFSET_X + f(195), rect_image_opponent.top)
+
+clock_player = Clock(minutes, increment, SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(10), rect_image_player.top)
+clock_opponent = Clock(minutes, increment, SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(10), rect_image_opponent.top)
 
 # assuming player is white
 names_player = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
@@ -1435,7 +1496,7 @@ mark_check()
 
 # game loop
 while 1:
-    screen.blit(image_bg, (0, 0))
+    screen.blit(image_bg, (SCREEN_OFFSET_X - f(15), SCREEN_OFFSET_Y - f(15)))
     screen.blit(image_table, rect_table)
 
     if player_to_move == "p":
@@ -1457,34 +1518,12 @@ while 1:
         else:
             for piece in pieces_opponent:
                 piece.handle_event(event)
-
-    if rect_moving_square_prev.center != (-1, -1):
-        screen.blit(moving_square_prev, rect_moving_square_prev)
-        screen.blit(moving_square_curr, rect_moving_square_curr)
+        if promoting:
+            for piece in pieces_promotion:
+                piece.handle_event_promotion(event)
     
-    if rect_check_square.center != (-1, -1):
-        screen.blit(check_square, rect_check_square)
+    render_gameplay()
 
-    pieces_player.draw(screen)
-    pieces_opponent.draw(screen)
-
-    # rendering off table stuff
-    screen.blit(image_unknown_user, rect_image_player)
-    screen.blit(image_unknown_user, rect_image_opponent)
-
-    render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
-    render_text("(3500)", f(140), rect_image_player.top + f(1), int(f(14)), True, GRAY)
-    render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
-    render_text("(987)", f(140), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
-
-    if promoting:
-        # darken the screen
-        screen.blit(dark_overlay, (TABLE_X, TABLE_Y))
-        pieces_promotion.draw(screen)
-
-        for piece in pieces_promotion:
-            piece.handle_event_promotion(event)
-    
     if game_end_reason is not None:
         print(game_end_reason)
         break
