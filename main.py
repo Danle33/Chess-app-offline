@@ -21,6 +21,7 @@ DARK_GREEN_TRANSPARENT1 = (0, 50, 0, 25)
 YELLOW_TRANSPARENT = (255, 255, 0, 20)
 YELLOW_TRANSPARENT1 = (255, 255, 0, 10)
 RED_TRANSPARENT = (255, 0, 0, 50)
+GRAY = (128, 128, 128)
 
 promoting = False
 pieces_promotion = pygame.sprite.Group()
@@ -71,6 +72,8 @@ enpassant_square = "-"
 halfmoves = 0
 fullmoves = 0
 
+game_end_reason = None
+
 # availability of each of 4 types of castling, used in fen
 K = k = Q = q = True
 
@@ -87,12 +90,15 @@ rect_dot = image_dot.get_rect()
 
 # FUNCTIONS
 
-# renders string s with center position at (x, y) and given font size
-def render_text(s, x, y, font_size):
+# renders string s with (default center) position at (x, y) and given font size
+def render_text(s, x, y, font_size, top_left=False, color=WHITE):
     font = pygame.font.Font("Assets/shared/fonts\\jetBrainsMono/ttf/JetBrainsMono-Regular.ttf", font_size)
-    text_surface = font.render(s, True, WHITE)
+    text_surface = font.render(s, True, color)
     rect_text = text_surface.get_rect()
-    rect_text.center = (x,y)
+    if top_left:
+        rect_text.topleft = (x, y)
+    else:
+        rect_text.center = (x, y)
     screen.blit(text_surface, rect_text)
 
 def simulate_move(square1, square2):
@@ -275,7 +281,19 @@ def stalemated():
             return True
 
 def insufficient_material():
-    pass
+    return False
+
+def set_game_end_reason():
+    global game_end_reason
+    if checkmated():
+        game_end_reason = "checkmate"
+        return
+    if stalemated():
+        game_end_reason = "stalemate"
+        return
+    if insufficient_material():
+        game_end_reason = "insufficient material"
+        return
 
 def scan_fen():
     # table is seen from whites perspective
@@ -556,6 +574,8 @@ class Piece(pygame.sprite.Sprite):
 
         # needed for castling
         self.moved = False
+
+        self.alive = True
 
         self.available_squares = set()
         self.attacking_squares = set()
@@ -1226,10 +1246,10 @@ class Piece(pygame.sprite.Sprite):
                     self.dragging = False
                     self.holding = False
                     self.unselecting_downclick = False
-                    self.make_move()
-                        
+                    self.make_move()                        
                     # update squares for every piece
                     update_available_squares()
+                    set_game_end_reason()
                     mark_check()
                     return
                 else:
@@ -1248,6 +1268,7 @@ class Piece(pygame.sprite.Sprite):
                     self.make_move()
                     # update squares for every piece
                     update_available_squares()
+                    set_game_end_reason()
                     mark_check()
                 else: # else reset the piece to the current position
                     self.rect.center = self.calc_position_screen(self.row, self.column)
@@ -1376,6 +1397,13 @@ while 1:
 pieces_player = pygame.sprite.Group()
 pieces_opponent = pygame.sprite.Group()
 
+image_unknown_user = pygame.image.load("Assets/dark/users/unknown user.png")
+image_unknown_user = pygame.transform.smoothscale(image_unknown_user, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7 * 93 / 97))
+rect_image_player = image_unknown_user.get_rect()
+rect_image_player.topleft = (f(10), TABLE_Y + 8 * SQUARE_SIZE + f(15))
+rect_image_opponent = image_unknown_user.get_rect()
+rect_image_opponent.bottomleft = (f(10), TABLE_Y - f(15))
+
 # assuming player is white
 names_player = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
 names_opponent = [piece.lower() for piece in names_player]
@@ -1388,7 +1416,7 @@ if player_color == "b":
     (route_player, route_opponent) = (route_opponent, route_player)
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-fen_start = "rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3" # bishop pinning the knight
+'''fen_start = "rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3" # bishop pinning the knight
 fen_start = "r1bqkbnr/ppppp1pp/2n5/4Pp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3" # en passant possible
 fen_start = "r1bqkbnr/ppppp1pp/2n5/4Pp2/8/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 4" # en passant not possible
 fen_start = "rnbq1rk1/pppp1ppp/5n2/2b1p3/2B1PP2/5N2/PPPP2PP/RNBQK2R w KQ - 5 5" # castling throught the bishop check
@@ -1396,14 +1424,14 @@ fen_start = "6k1/8/4B3/8/6R1/8/8/6K1 b - - 0 1" # double check
 fen_start = "3k4/8/8/1q6/3B4/8/5n2/3R2K1 w - - 0 1" # double check 2
 fen_start = "8/4k3/8/2q5/8/8/5n2/4R1K1 b - - 1 3" # counter check
 fen_start = "8/1QP3k1/8/8/2q5/8/8/6K1 w - - 0 1" #promotion with check
-fen_start = "8/8/4k3/8/8/5K2/8/8 w - - 0 1" # only 2 kings'''
-fen_start = "8/8/4k3/8/4K3/8/8/8 b - - 1 1" # kings in opposition
+fen_start = "8/8/4k3/8/8/5K2/8/8 w - - 0 1" # only 2 kings
+fen_start = "8/8/4k3/8/4K3/8/8/8 b - - 1 1" # kings in opposition'''
+
 fen.append(fen_start)
 convert_fen(fen_start)
 
 update_available_squares()
 mark_check()
-
 
 # game loop
 while 1:
@@ -1440,6 +1468,15 @@ while 1:
     pieces_player.draw(screen)
     pieces_opponent.draw(screen)
 
+    # rendering off table stuff
+    screen.blit(image_unknown_user, rect_image_player)
+    screen.blit(image_unknown_user, rect_image_opponent)
+
+    render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
+    render_text("(3500)", f(140), rect_image_player.top + f(1), int(f(14)), True, GRAY)
+    render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
+    render_text("(987)", f(140), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
+
     if promoting:
         # darken the screen
         screen.blit(dark_overlay, (TABLE_X, TABLE_Y))
@@ -1448,11 +1485,8 @@ while 1:
         for piece in pieces_promotion:
             piece.handle_event_promotion(event)
     
-    if checkmated():
-        print("cekmejt")
-        break
-    if stalemated():
-        print("stelmejlt")
+    if game_end_reason is not None:
+        print(game_end_reason)
         break
 
     pygame.display.flip()
