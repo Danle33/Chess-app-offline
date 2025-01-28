@@ -1,6 +1,7 @@
 import pygame
 import sys
 import copy
+import os
 
 pygame.init()
 
@@ -177,6 +178,40 @@ def simulate_move(square1, square2):
 
     # Update the target square with the piece's name
     TABLE_MATRIX[curr_row][curr_column] = piece_name
+
+def num_of_possible_moves(depth):
+    if depth == 0:
+        return 0
+    ans = 0
+    global fen, player_to_move
+    if player_to_move == "p":
+
+        for piece in pieces_player:
+            available_squares_orig = copy.deepcopy(piece.available_squares)
+            for square in available_squares_orig:
+                convert_fen(fen[-1])
+                piece.make_move(square)
+                post_move_processing()
+                player_to_move = "o"
+                ans += num_of_possible_moves(depth - 1) + 1
+                player_to_move = "p"
+                fen.pop()
+                convert_fen(fen[-1])
+
+    else:
+        for piece in pieces_opponent:
+            available_squares_orig = copy.deepcopy(piece.available_squares)
+            for square in available_squares_orig:
+                last_fen = fen[-1]
+                piece.make_move(square)
+                post_move_processing()
+                player_to_move = "p"
+                ans += num_of_possible_moves(depth - 1) + 1
+                player_to_move = "o"
+                fen.pop()
+                convert_fen(last_fen)
+    return ans
+
 
 # updates available squares after every move for each piece
 def update_available_squares():
@@ -412,9 +447,9 @@ def scan_fen():
     # remove first slash
     curr_fen = curr_fen[1:]
     fen.append(curr_fen)
-    print(fen[-1])
 
 def convert_fen(fen_string):
+    promoting = False
     # first destroy everything
     global TABLE_MATRIX, matrix_to_piece, pieces_player, pieces_opponent, halfmoves, fullmoves, player_to_move, player_color, K, Q, k, q
     TABLE_MATRIX = []
@@ -541,6 +576,9 @@ def convert_fen(fen_string):
             if right == "k": k = True
             if right == "Q": Q = True
             if right == "q": q = True
+
+    update_available_squares()
+
 
 # calculates new dimensions based on initial ones which are 450*975
 # handles rescalling while keeping aspect ratio
@@ -1515,14 +1553,16 @@ fen_start = "3k4/8/8/1q6/3B4/8/5n2/3R2K1 w - - 0 1" # double check 2
 fen_start = "8/4k3/8/2q5/8/8/5n2/4R1K1 b - - 1 3" # counter check
 fen_start = "8/1QP3k1/8/8/2q5/8/8/6K1 w - - 0 1" #promotion with check
 fen_start = "8/8/4k3/8/8/5K2/8/8 w - - 0 1" # only 2 kings
-fen_start = "8/8/4k3/8/4K3/8/8/8 b - - 1 1" # kings in opposition'''
+fen_start = "8/8/4k3/8/4K3/8/8/8 b - - 1 1" # kings in opposition
+fen_start = "8/2p5/3p4/KP5r/5p1k/4P3/6P1/8 b - - 0 1" # en passant with pin'''
 
 fen.append(fen_start)
 convert_fen(fen_start)
-
-update_available_squares()
 mark_check()
 
+pygame.quit()
+#print(num_of_possible_moves(3))
+'''
 # game loop
 while 1:
     screen.blit(image_bg, (SCREEN_OFFSET_X - f(15), SCREEN_OFFSET_Y - f(15)))
@@ -1571,4 +1611,4 @@ while 1:
         print(game_end_reason)
         break
 
-    pygame.display.flip()
+    pygame.display.flip()'''
