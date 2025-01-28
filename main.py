@@ -40,6 +40,8 @@ availableIncrements = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 60]
 
 SQUARE_SIZE = WIDTH / 8
 game_started = False
+# clocks are only starting after a pair of moves
+clocks_started = False
 
 # darken the screen while promoting
 dark_overlay = pygame.Surface((WIDTH, WIDTH))  # Create a surface
@@ -121,9 +123,9 @@ def render_gameplay():
     screen.blit(image_unknown_user, rect_image_opponent)
 
     render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
-    render_text("(3500)", SCREEN_OFFSET_X + f(140), rect_image_player.top + f(1), int(f(14)), True, GRAY)
+    render_text("(3500)", SCREEN_OFFSET_X + f(138), rect_image_player.top + f(1), int(f(14)), True, GRAY)
     render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
-    render_text("(987)", SCREEN_OFFSET_X  + f(140), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
+    render_text("(987)", SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
 
     screen.blit(image_flag_player, rect_flag_player)
     screen.blit(image_flag_opponent, rect_flag_opponent)
@@ -233,6 +235,33 @@ def print_table_state():
     for row in TABLE_MATRIX:
         print(*row)
     print("\n")
+
+def post_move_processing():
+    # next player
+    global player_to_move
+    if player_to_move == "p":
+        player_to_move = "o"
+    else:
+        player_to_move = "p"
+    
+    # update fen history
+    if not promoting:
+        scan_fen()
+        global enpassant_square
+        enpassant_square = "-"
+    
+    update_available_squares()
+    if clocks_started:
+        global clock_player, clock_opponent
+        if player_to_move == "p":
+            clock_opponent.seconds_left += increment
+        else:
+            clock_player.seconds_left += increment
+
+        clock_player.locked = not clock_player.locked
+        clock_opponent.locked = not clock_opponent.locked
+    set_game_end_reason()
+    mark_check()
 
 def mark_check():
     global rect_check_square
@@ -1221,18 +1250,6 @@ class Piece(pygame.sprite.Sprite):
                     pieces_promotion.add(Piece(name, pygame.image.load(route_opponent + f"{name}.png"), row, self.column, self.names))
                     row -= 1
 
-        # next player
-        global player_to_move
-        if player_to_move == "p":
-            player_to_move = "o"
-        else:
-            player_to_move = "p"
-        
-        # update fen history
-        if not promoting:
-            scan_fen()
-            enpassant_square = "-"
-
     def handle_event(self, event):
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
         mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
@@ -1281,10 +1298,7 @@ class Piece(pygame.sprite.Sprite):
                     self.holding = False
                     self.unselecting_downclick = False
                     self.make_move()                        
-                    # update squares for every piece
-                    update_available_squares()
-                    set_game_end_reason()
-                    mark_check()
+                    post_move_processing()
                     return
                 else:
                     self.rect.center = self.calc_position_screen(self.row, self.column)
@@ -1300,10 +1314,7 @@ class Piece(pygame.sprite.Sprite):
                 # Align the piece to the closest square if move is legal
                 if self.available_move():
                     self.make_move()
-                    # update squares for every piece
-                    update_available_squares()
-                    set_game_end_reason()
-                    mark_check()
+                    post_move_processing()
                 else: # else reset the piece to the current position
                     self.rect.center = self.calc_position_screen(self.row, self.column)
                     self.rect_square.center = self.rect.center
@@ -1361,13 +1372,31 @@ class Piece(pygame.sprite.Sprite):
             mark_check()
 
 class Clock(pygame.sprite.Sprite):
-    def __init__(self, minutes, increment, x, y):
+    def __init__(self, x, y):
         super().__init__()
-        self.minutes = minutes
-        self.increment = increment
-        self.rect = pygame.Rect(x, y, SQUARE_SIZE * 2, SQUARE_SIZE * 0.7)
+        self.start_seconds = minutes * 60
+        self.seconds_left = self.start_seconds
+        self.rect = pygame.Rect(x, y, WIDTH - x - f(10), SQUARE_SIZE * 0.7)
+        self.low_time_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
+        self.low_time_surface.fill(RED_TRANSPARENT)
+        self.locked = True
     def draw(self):
-        pygame.draw.rect(screen, WHITE, self.rect, width=int(f(1)))
+        render_color = WHITE
+        if self.locked:
+            render_color = GRAY
+        minutes = int(self.seconds_left // 60)
+        seconds = self.seconds_left % 60
+        if self.seconds_left > 10:
+            pygame.draw.rect(screen, render_color, self.rect, width=max(1, f(1)))
+            seconds = int(seconds)
+            render_text(f"{minutes:02}:{seconds:02}", self.rect.center[0], self.rect.center[1], int(f(25)), color=render_color)
+        else:
+            screen.blit(self.low_time_surface, self.rect.topleft)
+            render_text(f"{minutes:02}:{seconds:04.1f}", self.rect.center[0], self.rect.center[1], int(f(25)), color=render_color)
+
+    def update(self, dt):
+        if not self.locked:
+            self.seconds_left -= dt
 
 # background image
 image_bg = pygame.image.load("Assets/dark/backgrounds/boje1.png")
@@ -1455,15 +1484,15 @@ rect_image_opponent.bottomleft = (SCREEN_OFFSET_X  + f(10), TABLE_Y - f(15))
 image_flag_player = pygame.image.load("Assets/shared/flags/64/unknown.png")
 image_flag_player = pygame.transform.scale(image_flag_player, (f(20), f(20)))
 rect_flag_player = image_flag_player.get_rect()
-rect_flag_player.topleft = (SCREEN_OFFSET_X + f(203), rect_image_player.top)
+rect_flag_player.topleft = (SCREEN_OFFSET_X + f(200), rect_image_player.top)
 
 image_flag_opponent = pygame.image.load("Assets/shared/flags/64/unknown.png")
 image_flag_opponent = pygame.transform.scale(image_flag_opponent, (f(20), f(20)))
 rect_flag_opponent = image_flag_opponent.get_rect()
-rect_flag_opponent.topleft = (SCREEN_OFFSET_X + f(195), rect_image_opponent.top)
+rect_flag_opponent.topleft = (SCREEN_OFFSET_X + f(192), rect_image_opponent.top)
 
-clock_player = Clock(minutes, increment, SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(10), rect_image_player.top)
-clock_opponent = Clock(minutes, increment, SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(10), rect_image_opponent.top)
+clock_player = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_player.top)
+clock_opponent = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top)
 
 # assuming player is white
 names_player = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
@@ -1522,11 +1551,24 @@ while 1:
             for piece in pieces_promotion:
                 piece.handle_event_promotion(event)
     
+    dt = clock.tick(60) / 1000
+    # after 2 moves, lenght will be 3 since starting position is also in fen
+    if len(fen) == 3:
+        if player_to_move == "p":
+            clock_player.locked = False
+        else:
+            clock_opponent.locked = False
+        clocks_started = True
+    
     render_gameplay()
+    clock_player.update(dt)
+    clock_opponent.update(dt)
+
+    if clock_player.seconds_left < 0 or clock_opponent.seconds_left < 0:
+        game_end_reason = "timeout"
 
     if game_end_reason is not None:
         print(game_end_reason)
         break
 
     pygame.display.flip()
-    clock.tick(60)
