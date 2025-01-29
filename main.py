@@ -18,10 +18,6 @@ SCREEN_OFFSET_Y = 0
 TABLE_X = SCREEN_OFFSET_X
 TABLE_Y = HEIGHT / 2 - WIDTH / 2 + SCREEN_OFFSET_Y
 
-SETTINGS_ANIMATION_SPEED = -20 # pixels per frame
-SETTINGS_ANIMATION_RUNNING = False
-IN_SETTINGS = False
-
 #colors
 WHITE = (255, 255, 255)
 BLACKY = (30, 30, 30)
@@ -279,6 +275,8 @@ def print_table_state():
     print("\n")
 
 def post_move_processing():
+    if promoting:
+        return
     # next player
     global player_to_move
     if player_to_move == "p":
@@ -299,7 +297,6 @@ def post_move_processing():
             clock_opponent.seconds_left += increment
         else:
             clock_player.seconds_left += increment
-
         clock_player.locked = not clock_player.locked
         clock_opponent.locked = not clock_opponent.locked
     set_game_end_reason()
@@ -619,7 +616,7 @@ def convert_fen(fen_string):
 
 
 # calculates new dimensions based on initial ones which are 450*975
-# handles rescalling while keeping aspect ratio
+# enables rescalling while keeping aspect ratio
 def f(x):
     return x * WIDTH / 450
 
@@ -1451,9 +1448,7 @@ class Piece(pygame.sprite.Sprite):
             promoting = False
             scan_fen()
             
-            update_available_squares()
-            set_game_end_reason()
-            mark_check()
+            post_move_processing()
 
 class Clock(pygame.sprite.Sprite):
     def __init__(self, x, y, player):
@@ -1488,6 +1483,10 @@ class Clock(pygame.sprite.Sprite):
             self.rect.y += SETTINGS_ANIMATION_SPEED / 4
         else:
             self.rect.y -= SETTINGS_ANIMATION_SPEED / 4
+
+SETTINGS_ANIMATION_SPEED = -f(20) # pixels per frame
+SETTINGS_ANIMATION_RUNNING = False
+IN_SETTINGS = False
 
 # background image
 image_bg = pygame.image.load("Assets/dark/backgrounds/boje1.png")
