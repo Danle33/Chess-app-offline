@@ -18,6 +18,10 @@ SCREEN_OFFSET_Y = 0
 TABLE_X = SCREEN_OFFSET_X
 TABLE_Y = HEIGHT / 2 - WIDTH / 2 + SCREEN_OFFSET_Y
 
+SETTINGS_ANIMATION_SPEED = -20 # pixels per frame
+SETTINGS_ANIMATION_RUNNING = False
+IN_SETTINGS = False
+
 #colors
 WHITE = (255, 255, 255)
 BLACKY = (30, 30, 30)
@@ -109,11 +113,13 @@ def render_text(s, x, y, font_size, top_left=False, color=WHITE):
     screen.blit(text_surface, rect_text)
 
 def render_gameplay():
-    if rect_moving_square_prev.center != (-1, -1):
+    screen.blit(image_settings, rect_settings)
+
+    if rect_moving_square_prev.center != (-1 + SCREEN_OFFSET_X, -1 + SCREEN_OFFSET_Y):
         screen.blit(moving_square_prev, rect_moving_square_prev)
         screen.blit(moving_square_curr, rect_moving_square_curr)
     
-    if rect_check_square.center != (-1, -1):
+    if rect_check_square.center != (-1 + SCREEN_OFFSET_X, -1 + SCREEN_OFFSET_Y):
         screen.blit(check_square, rect_check_square)
 
     pieces_player.draw(screen)
@@ -136,7 +142,7 @@ def render_gameplay():
 
     if promoting:
         # darken the screen
-        screen.blit(dark_overlay, (TABLE_X, TABLE_Y))
+        screen.blit(dark_overlay, (TABLE_X + SCREEN_OFFSET_X, TABLE_Y + SCREEN_OFFSET_Y))
         pieces_promotion.draw(screen)
 
 def simulate_move(square1, square2):
@@ -179,7 +185,8 @@ def simulate_move(square1, square2):
     # Update the target square with the piece's name
     TABLE_MATRIX[curr_row][curr_column] = piece_name
 
-def num_of_possible_moves(depth):
+# user for some testing, calculates number of possible positions at a certain depth
+def num_of_possible_positions(depth):
     if depth == 0:
         return 0
     ans = 0
@@ -193,7 +200,7 @@ def num_of_possible_moves(depth):
                 piece.make_move(square)
                 post_move_processing()
                 player_to_move = "o"
-                ans += num_of_possible_moves(depth - 1) + 1
+                ans += num_of_possible_positions(depth - 1) + 1
                 player_to_move = "p"
                 fen.pop()
                 convert_fen(fen[-1])
@@ -206,7 +213,7 @@ def num_of_possible_moves(depth):
                 piece.make_move(square)
                 post_move_processing()
                 player_to_move = "p"
-                ans += num_of_possible_moves(depth - 1) + 1
+                ans += num_of_possible_positions(depth - 1) + 1
                 player_to_move = "o"
                 fen.pop()
                 convert_fen(last_fen)
@@ -380,6 +387,37 @@ def stalemated():
             return True
 
 def insufficient_material():
+    pieces_player_left = len(pieces_player)
+    pieces_opponent_left = len(pieces_opponent)
+
+    # king vs king
+    if pieces_player_left == pieces_opponent_left == 1:
+        return True
+
+    if pieces_player_left + pieces_opponent_left == 3:
+        # king vs king and bishop or king vs king and knight
+        for piece in pieces_player:
+            if piece.name in ["B", "b", "N", "n"]:
+                return True
+        for piece in pieces_opponent:
+            if piece.name in ["B", "b", "N", "n"]:
+                return True
+    if pieces_player_left == pieces_opponent_left == 2:
+        # get the non king pieces
+        for piece in pieces_player:
+            if piece.name not in ["K", "k"]:
+                piece_player = piece
+                break
+        for piece in pieces_opponent:
+            if piece.name not in ["K", "k"]:
+                piece_opponent = piece
+                break
+
+        # check for two bishops
+        # white squares have sum of coordinates being even, blacks odd
+        if piece_player.name in ["B", "b"] and piece_opponent.name in ["B", "b"] and (piece_player.row + piece_player.column) % 2 == (piece_opponent.row + piece_opponent.column) % 2:
+            return True
+        
     return False
 
 def set_game_end_reason():
@@ -677,23 +715,27 @@ class Piece(pygame.sprite.Sprite):
         # needed for castling
         self.moved = False
 
-        self.alive = True
-
         self.available_squares = set()
         self.attacking_squares = set()
     
+    def update_rect_position(self):
+        self.rect.x += SETTINGS_ANIMATION_SPEED
+        #self.rect.y += SETTINGS_ANIMATION_SPEED / 2
+        self.rect_square.x += SETTINGS_ANIMATION_SPEED
+        #self.rect_square.y += SETTINGS_ANIMATION_SPEED / 2
+
     # caluclates screen position of a piece based on matrix position
     def calc_position_screen(self, row, column):
-        x = TABLE_X + column * SQUARE_SIZE + SQUARE_SIZE / 2
-        y = TABLE_Y + row * SQUARE_SIZE + SQUARE_SIZE / 2
+        x = TABLE_X + column * SQUARE_SIZE + SQUARE_SIZE / 2 + SCREEN_OFFSET_X
+        y = TABLE_Y + row * SQUARE_SIZE + SQUARE_SIZE / 2 + SCREEN_OFFSET_Y
         return (int(x), int(y))
     
     # calculates row and column for a given screen position
     # inverse function of the calc_position_screen()
     def calc_position_matrix(self, center):
         (x, y) = center
-        row = (y - TABLE_Y) / SQUARE_SIZE
-        column = (x -TABLE_X) / SQUARE_SIZE
+        row = (y + SCREEN_OFFSET_Y - TABLE_Y) / SQUARE_SIZE
+        column = (x + SCREEN_OFFSET_X -TABLE_X) / SQUARE_SIZE
         return (int(row), int(column))
     
     # initializes pairs of (row, column) coordinates of available squares after every move for a current piece
@@ -1289,6 +1331,8 @@ class Piece(pygame.sprite.Sprite):
                     row -= 1
 
     def handle_event(self, event):
+        if IN_SETTINGS:
+            return
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
         mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
         left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
@@ -1305,7 +1349,7 @@ class Piece(pygame.sprite.Sprite):
 
         if left_click:
             # if out of screen bounds
-            if not (TABLE_X <= mouse_x <= TABLE_X + 8 * SQUARE_SIZE and TABLE_Y <= mouse_y <= TABLE_Y + 8 * SQUARE_SIZE):
+            if not (TABLE_X  <= mouse_x <= TABLE_X + 8 * SQUARE_SIZE and TABLE_Y <= mouse_y <= TABLE_Y + 8 * SQUARE_SIZE):
                 # reset piece position
                 self.rect.center = self.calc_position_screen(self.row, self.column)
                 self.rect_square.center = self.rect.center
@@ -1376,6 +1420,8 @@ class Piece(pygame.sprite.Sprite):
             self.rect_square.center = self.rect.center
 
     def handle_event_promotion(self, event):
+        if IN_SETTINGS:
+            return
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
         mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
         left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
@@ -1410,7 +1456,7 @@ class Piece(pygame.sprite.Sprite):
             mark_check()
 
 class Clock(pygame.sprite.Sprite):
-    def __init__(self, x, y):
+    def __init__(self, x, y, player):
         super().__init__()
         self.start_seconds = minutes * 60
         self.seconds_left = self.start_seconds
@@ -1418,6 +1464,7 @@ class Clock(pygame.sprite.Sprite):
         self.low_time_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
         self.low_time_surface.fill(RED_TRANSPARENT)
         self.locked = True
+        self.player = player
     def draw(self):
         render_color = WHITE
         if self.locked:
@@ -1435,10 +1482,16 @@ class Clock(pygame.sprite.Sprite):
     def update(self, dt):
         if not self.locked:
             self.seconds_left -= dt
+    
+    def update_rect_position(self):
+        if self.player:
+            self.rect.y += SETTINGS_ANIMATION_SPEED / 4
+        else:
+            self.rect.y -= SETTINGS_ANIMATION_SPEED / 4
 
 # background image
 image_bg = pygame.image.load("Assets/dark/backgrounds/boje1.png")
-image_bg = pygame.transform.scale(image_bg, (WIDTH*1.1, HEIGHT*1.1))
+image_bg = pygame.transform.scale(image_bg, (WIDTH, HEIGHT))
 
 # table
 image_table = pygame.image.load("Assets/dark/boards/tiles.png")
@@ -1486,8 +1539,9 @@ while 1:
     
     if game_started:
         break
-
-    screen.blit(image_bg, (0-f(15), 0-f(15)))
+    
+    screen.fill(BLACKY)
+    screen.blit(image_bg, (0-f(0), 0-f(0)))
 
     screen.blit(image_K, rect_K)
     screen.blit(image_k, rect_k)
@@ -1505,10 +1559,7 @@ while 1:
     pygame.display.flip()
     clock.tick(60)
 
-screen.fill(BLACKY)
-
 # SETTING PIECES UP
-# real pieces in real time
 pieces_player = pygame.sprite.Group()
 pieces_opponent = pygame.sprite.Group()
 
@@ -1529,8 +1580,13 @@ image_flag_opponent = pygame.transform.scale(image_flag_opponent, (f(20), f(20))
 rect_flag_opponent = image_flag_opponent.get_rect()
 rect_flag_opponent.topleft = (SCREEN_OFFSET_X + f(192), rect_image_opponent.top)
 
-clock_player = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_player.top)
-clock_opponent = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top)
+image_settings = pygame.image.load("Assets/dark/options.png")
+image_settings = pygame.transform.scale(image_settings, (SQUARE_SIZE * 0.6, SQUARE_SIZE * 0.6 * 55 / 75))
+rect_settings = image_settings.get_rect()
+rect_settings.topleft = (SCREEN_OFFSET_X + f(30), SCREEN_OFFSET_Y + f(30))
+
+clock_player = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_player.top, True)
+clock_opponent = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top, False)
 
 # assuming player is white
 names_player = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
@@ -1543,30 +1599,82 @@ if player_color == "b":
     names_opponent = [piece.upper() for piece in names_player]
     (route_player, route_opponent) = (route_opponent, route_player)
 
+
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-'''fen_start = "rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3" # bishop pinning the knight
+
+# try positions
+'''
+fen_start = "rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3" # bishop pinning the knight
 fen_start = "r1bqkbnr/ppppp1pp/2n5/4Pp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3" # en passant possible
 fen_start = "r1bqkbnr/ppppp1pp/2n5/4Pp2/8/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 4" # en passant not possible
 fen_start = "rnbq1rk1/pppp1ppp/5n2/2b1p3/2B1PP2/5N2/PPPP2PP/RNBQK2R w KQ - 5 5" # castling throught the bishop check
 fen_start = "6k1/8/4B3/8/6R1/8/8/6K1 b - - 0 1" # double check
 fen_start = "3k4/8/8/1q6/3B4/8/5n2/3R2K1 w - - 0 1" # double check 2
 fen_start = "8/4k3/8/2q5/8/8/5n2/4R1K1 b - - 1 3" # counter check
-fen_start = "8/1QP3k1/8/8/2q5/8/8/6K1 w - - 0 1" #promotion with check
+fen_start = "8/1QP3k1/8/8/2q5/8/8/6K1 w - - 0 1" # promotion with check
 fen_start = "8/8/4k3/8/8/5K2/8/8 w - - 0 1" # only 2 kings
 fen_start = "8/8/4k3/8/4K3/8/8/8 b - - 1 1" # kings in opposition
-fen_start = "8/2p5/3p4/KP5r/5p1k/4P3/6P1/8 b - - 0 1" # en passant with pin'''
+fen_start = "8/2p5/3p4/KP5r/5p1k/4P3/6P1/8 b - - 0 1" # en passant with pin
+fen_start = "8/8/4k3/8/3P4/4K3/8/8 w - - 0 1" # king vs king draw
+fen_start = "8/8/3k4/8/2B5/4Kb2/8/8 w - - 0 1" # king vs king and bishop draw
+fen_start = "8/4k3/8/8/2N5/4Kb2/8/8 w - - 0 1" # king vs king and knight draw
+fen_start = "8/4k3/2b5/8/2B5/4K3/3r4/8 w - - 0 1" # king and bishop vs king and bishop (same colors) draw
+fen_start = "8/2b1k3/8/8/2B5/4K3/3r4/8 w - - 0 1" # king and bishop vs king and bishop (opposite colors) not draw
+'''
 
 fen.append(fen_start)
 convert_fen(fen_start)
 mark_check()
 
-pygame.quit()
-#print(num_of_possible_moves(3))
-'''
+# DONT RUN THIS UR PC WILL DIE
+#print(num_of_possible_positions(3))
+
 # game loop
 while 1:
-    screen.blit(image_bg, (SCREEN_OFFSET_X - f(15), SCREEN_OFFSET_Y - f(15)))
+    screen.fill(BLACKY)
+    screen.blit(image_bg, (SCREEN_OFFSET_X - f(0), SCREEN_OFFSET_Y - f(0)))
     screen.blit(image_table, rect_table)
+
+    if SETTINGS_ANIMATION_RUNNING:
+        # update every rectangle
+        SCREEN_OFFSET_X += SETTINGS_ANIMATION_SPEED
+        #SCREEN_OFFSET_Y += SETTINGS_ANIMATION_SPEED / 2
+        rect_table.x += SETTINGS_ANIMATION_SPEED
+        #rect_table.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_settings.x += SETTINGS_ANIMATION_SPEED
+        #rect_settings.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_image_player.x += SETTINGS_ANIMATION_SPEED
+        #rect_image_player.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_image_opponent.x += SETTINGS_ANIMATION_SPEED
+        #rect_image_opponent.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_flag_player.x += SETTINGS_ANIMATION_SPEED
+        #rect_flag_player.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_flag_opponent.x += SETTINGS_ANIMATION_SPEED
+        #rect_flag_opponent.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_moving_square_prev.x += SETTINGS_ANIMATION_SPEED
+        #rect_moving_square_prev.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_moving_square_curr.x += SETTINGS_ANIMATION_SPEED
+        #rect_moving_square_curr.y += SETTINGS_ANIMATION_SPEED / 2
+        rect_check_square.x += SETTINGS_ANIMATION_SPEED
+        #rect_check_square.y += SETTINGS_ANIMATION_SPEED / 2
+
+        for piece in pieces_player:
+            piece.update_rect_position()
+        for piece in pieces_opponent:
+            piece.update_rect_position()
+        
+        for piece in pieces_promotion:
+            piece.update_rect_position()
+        
+        clock_player.update_rect_position()
+        clock_opponent.update_rect_position()
+
+    if SCREEN_OFFSET_X >= WIDTH * 0.6:
+        SETTINGS_ANIMATION_RUNNING = False
+        IN_SETTINGS = True
+    if SCREEN_OFFSET_X <= 0:
+        SETTINGS_ANIMATION_RUNNING = False
+        IN_SETTINGS = False
 
     if player_to_move == "p":
         for piece in pieces_player:
@@ -1581,6 +1689,15 @@ while 1:
         if event.type == pygame.QUIT:
             pygame.quit()
             sys.exit()
+        
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            rect_settings_bigger = rect_settings.copy()
+            rect_settings_bigger.width *= 1.5
+            rect_settings_bigger.height *= 1.5
+            rect_settings_bigger.center = rect_settings.center 
+            if rect_settings_bigger.collidepoint(event.pos):
+                SETTINGS_ANIMATION_RUNNING = True
+                SETTINGS_ANIMATION_SPEED *= -1
         if player_to_move == "p":
             for piece in pieces_player:
                 piece.handle_event(event)
@@ -1611,4 +1728,4 @@ while 1:
         print(game_end_reason)
         break
 
-    pygame.display.flip()'''
+    pygame.display.flip()
