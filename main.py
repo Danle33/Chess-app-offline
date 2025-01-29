@@ -44,6 +44,9 @@ game_started = False
 # clocks are only starting after a pair of moves
 clocks_started = False
 
+resigned = False
+draw = False
+
 # darken the screen while promoting
 dark_overlay = pygame.Surface((WIDTH, WIDTH))  # Create a surface
 dark_overlay.set_alpha(200)  # Set alpha (0 is transparent, 255 is opaque)
@@ -74,6 +77,9 @@ for i in range(8):
 
 # fen code, list of strings where every string describes one position
 fen = []
+
+# mapping position to how many times it occured, used for threefold repetition detection
+fen_count = dict()
 
 enpassant_square = "-"
 halfmoves = 0
@@ -355,7 +361,7 @@ def in_check():
                 return True
         return False
 
-def checkmated():
+def checkmate():
     if player_to_move == "p":
         for piece in pieces_player:
             if len(piece.available_squares) > 0:
@@ -369,7 +375,7 @@ def checkmated():
         if in_check():
             return True
 
-def stalemated():
+def stalemate():
     if player_to_move == "p":
         for piece in pieces_player:
             if len(piece.available_squares) > 0:
@@ -417,17 +423,20 @@ def insufficient_material():
         
     return False
 
+def fifty_move_rule():
+    return halfmoves == 100
+
+def threefold_repetition():
+    curr_fen = " ".join(fen[-1].split()[:4])
+    return fen_count[curr_fen] == 3
+
 def set_game_end_reason():
     global game_end_reason
-    if checkmated():
-        game_end_reason = "checkmate"
-        return
-    if stalemated():
-        game_end_reason = "stalemate"
-        return
-    if insufficient_material():
-        game_end_reason = "insufficient material"
-        return
+    if checkmate(): game_end_reason = "checkmate"
+    elif stalemate(): game_end_reason = "stalemate"
+    elif insufficient_material(): game_end_reason = "insufficient material"
+    elif fifty_move_rule(): game_end_reason = "50-move rule"
+    elif threefold_repetition(): game_end_reason = "threefold repetition"
 
 def scan_fen():
     # table is seen from whites perspective
@@ -450,6 +459,9 @@ def scan_fen():
                     blank_squares_counter += 1
             if blank_squares_counter > 0:
                 curr_fen += str(blank_squares_counter)
+
+    # remove first slash
+    curr_fen = curr_fen[1:]
 
     global fullmoves
     if player_to_move == "p":
@@ -477,10 +489,15 @@ def scan_fen():
     
     curr_fen += " "
     curr_fen += enpassant_square
+
+    global fen_count
+    # store fen without halfomves and fullmoves
+    if curr_fen not in fen_count:
+        fen_count[curr_fen] = 0
+    fen_count[curr_fen] += 1
+
     curr_fen += f" {halfmoves} {fullmoves}"
 
-    # remove first slash
-    curr_fen = curr_fen[1:]
     fen.append(curr_fen)
 
 def convert_fen(fen_string):
@@ -1361,7 +1378,7 @@ class Piece(pygame.sprite.Sprite):
                 else:
                     self.selected = True
                 self.holding = True
-            # handle making a move by clicking at an availablq square
+            # handle making a move by clicking at available square
             elif self.selected:
                 curr_x = max(mouse_x, self.rect.size[0] / 2)
                 curr_x = min(curr_x, WIDTH - self.rect.size[0] / 2)
@@ -1500,7 +1517,10 @@ rect_table.topleft = (TABLE_X, TABLE_Y)
 
 # home screen
 slider1 = Slider(f(200))
+# set 3+2 mode manually
+slider1.rect_cursor.x += f(120)
 slider2 = Slider(f(400))
+slider2.rect_cursor.x += f(60)
 
 # assuming player is white
 route_player = "Assets/dark/pieces white/"
@@ -1562,6 +1582,9 @@ while 1:
 pieces_player = pygame.sprite.Group()
 pieces_opponent = pygame.sprite.Group()
 
+captured_pieces_player = pygame.sprite.Group()
+captured_pieces_opponent = pygame.sprite.Group()
+
 image_unknown_user = pygame.image.load("Assets/dark/users/unknown user.png")
 image_unknown_user = pygame.transform.smoothscale(image_unknown_user, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7 * 93 / 97))
 rect_image_player = image_unknown_user.get_rect()
@@ -1588,16 +1611,21 @@ clock_player = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_ima
 clock_opponent = Clock(SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top, False)
 
 # assuming player is white
-names_player = ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
+names_player = ['P', 'N', 'B', 'R', 'Q', 'K']
 names_opponent = [piece.lower() for piece in names_player]
 
 # if player is indeed black, switch player route to blacks and change piece names to lowercase, also replace king and queen
 if player_color == "b":
     player_to_move = "o"
-    names_player = ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p', 'r', 'n', 'b', 'k', 'q', 'b', 'n', 'r']
-    names_opponent = [piece.upper() for piece in names_player]
+    (names_player, names_opponent) = (names_opponent, names_player)
     (route_player, route_opponent) = (route_opponent, route_player)
 
+piece_values = [1, 3, 3, 5, 8, 0]
+piece_to_value = dict()
+for name, value in zip(names_player, piece_values):
+    piece_to_value[name] = value
+for name, value in zip(names_opponent, piece_values):
+    piece_to_value[name] = value
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
@@ -1623,39 +1651,28 @@ fen_start = "8/2b1k3/8/8/2B5/4K3/3r4/8 w - - 0 1" # king and bishop vs king and 
 
 fen.append(fen_start)
 convert_fen(fen_start)
-mark_check()
 
 # DONT RUN THIS UR PC WILL DIE
 #print(num_of_possible_positions(3))
 
 # game loop
 while 1:
+    # rendering "behind" the gameplay
     screen.fill(BLACKY)
-    screen.blit(image_bg, (SCREEN_OFFSET_X - f(0), SCREEN_OFFSET_Y - f(0)))
+    screen.blit(image_bg, (SCREEN_OFFSET_X, SCREEN_OFFSET_Y))
     screen.blit(image_table, rect_table)
 
     if SETTINGS_ANIMATION_RUNNING:
-        # update every rectangle
         SCREEN_OFFSET_X += SETTINGS_ANIMATION_SPEED
-        #SCREEN_OFFSET_Y += SETTINGS_ANIMATION_SPEED / 2
         rect_table.x += SETTINGS_ANIMATION_SPEED
-        #rect_table.y += SETTINGS_ANIMATION_SPEED / 2
         rect_settings.x += SETTINGS_ANIMATION_SPEED
-        #rect_settings.y += SETTINGS_ANIMATION_SPEED / 2
         rect_image_player.x += SETTINGS_ANIMATION_SPEED
-        #rect_image_player.y += SETTINGS_ANIMATION_SPEED / 2
         rect_image_opponent.x += SETTINGS_ANIMATION_SPEED
-        #rect_image_opponent.y += SETTINGS_ANIMATION_SPEED / 2
         rect_flag_player.x += SETTINGS_ANIMATION_SPEED
-        #rect_flag_player.y += SETTINGS_ANIMATION_SPEED / 2
         rect_flag_opponent.x += SETTINGS_ANIMATION_SPEED
-        #rect_flag_opponent.y += SETTINGS_ANIMATION_SPEED / 2
         rect_moving_square_prev.x += SETTINGS_ANIMATION_SPEED
-        #rect_moving_square_prev.y += SETTINGS_ANIMATION_SPEED / 2
         rect_moving_square_curr.x += SETTINGS_ANIMATION_SPEED
-        #rect_moving_square_curr.y += SETTINGS_ANIMATION_SPEED / 2
         rect_check_square.x += SETTINGS_ANIMATION_SPEED
-        #rect_check_square.y += SETTINGS_ANIMATION_SPEED / 2
 
         for piece in pieces_player:
             piece.update_rect_position()
@@ -1703,6 +1720,7 @@ while 1:
         else:
             for piece in pieces_opponent:
                 piece.handle_event(event)
+            
         if promoting:
             for piece in pieces_promotion:
                 piece.handle_event_promotion(event)
@@ -1720,8 +1738,10 @@ while 1:
     clock_player.update(dt)
     clock_opponent.update(dt)
 
-    if clock_player.seconds_left < 0 or clock_opponent.seconds_left < 0:
-        game_end_reason = "timeout"
+    # these situations have to be checked every frame, whereas set_game_reason() gets called only after a move
+    if clock_player.seconds_left < 0 or clock_opponent.seconds_left < 0: game_end_reason = "timeout"
+    elif resigned: game_end_reason = "resignation"
+    elif draw: game_end_reason = "mutual agreement"
 
     if game_end_reason is not None:
         print(game_end_reason)
