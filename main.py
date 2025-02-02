@@ -189,6 +189,7 @@ class Game:
         self.player_color = home.player_color
 
         self.advantage = 0
+        self.advantage_x = 0
 
         self.minutes = home.minutes
         self.increment = home.increment
@@ -252,8 +253,8 @@ class Game:
         self.pieces_player = pygame.sprite.Group()
         self.pieces_opponent = pygame.sprite.Group()
 
-        self.captured_pieces_player = pygame.sprite.Group()
-        self.captured_pieces_opponent = pygame.sprite.Group()
+        self.captured_pieces_player = []
+        self.captured_pieces_opponent = []
 
         rect_image_player.topleft = (self.SCREEN_OFFSET_X + f(10), self.TABLE_Y + 8 * SQUARE_SIZE + f(15))
         rect_image_opponent.bottomleft = (self.SCREEN_OFFSET_X  + f(10), self.TABLE_Y - f(15))
@@ -308,6 +309,13 @@ class Game:
                 for piece in self.pieces_promotion:
                     piece.update_rect_position()
                 
+                for piece in self.captured_pieces_player:
+                    piece.update_rect_position()
+                for piece in self.captured_pieces_opponent:
+                    piece.update_rect_position()
+                
+                self.advantage_x += self.SETTINGS_ANIMATION_SPEED
+
                 self.clock_player.update_rect_position()
                 self.clock_opponent.update_rect_position()
             
@@ -372,6 +380,11 @@ class Game:
             self.pieces_player.draw(screen)
             self.pieces_opponent.draw(screen)
 
+            for piece in self.captured_pieces_player:
+                screen.blit(piece.image, piece.rect)
+            for piece in self.captured_pieces_opponent:
+                screen.blit(piece.image, piece.rect)
+
             # rendering off table stuff
             screen.blit(image_unknown_user, rect_image_player)
             screen.blit(image_unknown_user, rect_image_opponent)
@@ -385,9 +398,9 @@ class Game:
             screen.blit(image_flag_opponent, rect_flag_opponent)
 
             if self.advantage > 0:
-                render_text(f"+{self.advantage}", rect_image_player.right + f(15), rect_image_player.top + f(25), int(f(10)), True)
+                render_text(f"+{self.advantage}", self.advantage_x, rect_image_player.top + f(24), int(f(10)), True)
             elif self.advantage < 0:
-                render_text(f"+{-self.advantage}", rect_image_opponent.right + f(15), rect_image_opponent.top + f(25), int(f(10)), True)
+                render_text(f"+{-self.advantage}", self.advantage_x, rect_image_opponent.top + f(24), int(f(10)), True)
 
             self.clock_player.draw()
             self.clock_opponent.draw()
@@ -847,10 +860,52 @@ class Game:
 
         self.update_available_squares()
 
-class Slider(pygame.sprite.Sprite):
+    def process_captured_piece(self, piece_name):
+        removed = False
+        if self.player_to_move == "p":
+            for piece in self.captured_pieces_opponent:
+                if piece.name == piece_name.upper():
+                    self.captured_pieces_opponent.remove(piece)
+                    removed = True
+                    break
+            if not removed:
+                piece = Piece(self, piece_name.upper(), pygame.image.load(f"Assets/neutral/{piece_name.upper()}.png"), 0, 0, [])
+                piece.image = pygame.transform.smoothscale(piece.image, (f(12), f(12)))
+                self.captured_pieces_player.append(piece)
+        else:
+            for piece in self.captured_pieces_player:
+                if piece.name == piece_name.upper():
+                    self.captured_pieces_player.remove(piece)
+                    removed = True
+                    break
+            if not removed:
+                piece = Piece(self, piece_name.upper(), pygame.image.load(f"Assets/neutral/{piece_name.upper()}.png"), 0, 0, [])
+                piece.image = pygame.transform.smoothscale(piece.image, (f(12), f(12)))
+                self.captured_pieces_opponent.append(piece)
+        
+        self.captured_pieces_player.sort(key=lambda piece : -piece_to_value[piece.name])
+        x = rect_image_player.right + f(15)
+        y = rect_image_player.top + f(25)
+        for piece in self.captured_pieces_player:
+            piece.rect.topleft = (x, y)
+            x += f(12)
+        
+        if self.advantage > 0:
+            self.advantage_x = x + f(5)
+        
+        self.captured_pieces_opponent.sort(key=lambda piece : -piece_to_value[piece.name])
+        x = rect_image_opponent.right + f(15)
+        y = rect_image_opponent.top + f(25)
+        for piece in self.captured_pieces_opponent:
+            piece.rect.topleft = (x, y)
+            x += f(12)
+        
+        if self.advantage < 0:
+            self.advantage_x = x + f(5)
+
+class Slider():
 
     def __init__(self, y):
-        super().__init__()
         self.y = y
         self.height = f(15)
         self.width_panel = WIDTH * 3 / 4
@@ -1473,12 +1528,22 @@ class Piece(pygame.sprite.Sprite):
             if self.game.TABLE_MATRIX[self.row + 1][self.column] in ["P", "p"]:
                 self.game.halfmoves = 0
                 captured_piece = self.game.matrix_to_piece[((self.row + 1, self.column))]
+                if self.names == self.game.names_player:
+                    self.game.advantage += piece_to_value[captured_piece.name]
+                else:
+                    self.game.advantage -= piece_to_value[captured_piece.name]
+                self.game.process_captured_piece(captured_piece.name)
                 captured_piece.kill()
                 self.game.TABLE_MATRIX[self.row + 1][self.column] = '.'
                 self.game.matrix_to_piece[(self.row, self.column)] = None
             if self.game.TABLE_MATRIX[self.row - 1][self.column] in ["P", "p"]:
                 self.game.halfmoves = 0
                 captured_piece = self.game.matrix_to_piece[((self.row - 1, self.column))]
+                if self.names == self.game.names_player:
+                    self.game.advantage += piece_to_value[captured_piece.name]
+                else:
+                    self.game.advantage -= piece_to_value[captured_piece.name]
+                self.game.process_captured_piece(captured_piece.name)
                 captured_piece.kill()
                 self.game.TABLE_MATRIX[self.row - 1][self.column] = '.'
                 self.game.matrix_to_piece[(self.row, self.column)] = None
@@ -1494,7 +1559,7 @@ class Piece(pygame.sprite.Sprite):
                 self.game.advantage += piece_to_value[captured_piece.name]
             else:
                 self.game.advantage -= piece_to_value[captured_piece.name]
-            print(self.game.advantage)
+            self.game.process_captured_piece(captured_piece.name)
             # disable capturing when rook gets taken
             if self.game.TABLE_MATRIX[self.row][self.column] in ["R", "r"] and not captured_piece.moved:
                 if captured_piece.name == "R":
@@ -1510,6 +1575,7 @@ class Piece(pygame.sprite.Sprite):
                         self.game.k = False
                     else:
                         self.game.q = False
+            
             captured_piece.kill()
             self.game.matrix_to_piece[(self.row, self.column)] = None
         
@@ -1663,13 +1729,11 @@ class Piece(pygame.sprite.Sprite):
             
             self.game.pieces_promotion = pygame.sprite.Group()
             self.game.promoting = False
-            self.game.scan_fen()
             
             self.game.post_move_processing()
 
-class Clock(pygame.sprite.Sprite):
+class Clock():
     def __init__(self, game, x, y, player):
-        super().__init__()
         self.game = game
         self.start_seconds = game.minutes * 60
         self.seconds_left = self.start_seconds
@@ -1708,4 +1772,5 @@ home.run()
 game = Game(home)
 game.run()
 del game
+
 
