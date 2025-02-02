@@ -60,6 +60,7 @@ def render_text(s, x, y, font_size, top_left=False, color=WHITE):
     else:
         rect_text.center = (x, y)
     screen.blit(text_surface, rect_text)
+    return rect_text
 
 # calculates new dimensions based on initial ones which are 450*975
 # enables rescalling while keeping aspect ratio
@@ -77,14 +78,23 @@ rect_table = image_table.get_rect()
 
 # kings images home screen
 image_K = pygame.image.load("Assets/dark/pieces white/K.png")
-image_K = pygame.transform.scale(image_K, (f(100), f(100)))
+image_K = pygame.transform.smoothscale(image_K, (f(100), f(100)))
 rect_K = image_K.get_rect()
 rect_K.center = (WIDTH / 2 - f(100), HEIGHT - f(100))
 
 image_k = pygame.image.load("Assets/dark/pieces black/k.png")
-image_k = pygame.transform.scale(image_k, (f(100), f(100)))
+image_k = pygame.transform.smoothscale(image_k, (f(100), f(100)))
 rect_k = image_k.get_rect()
 rect_k.center = (WIDTH / 2 + f(100), HEIGHT - f(100))
+
+image_N = pygame.image.load("Assets/dark/pieces white/N.png")
+image_N = pygame.transform.smoothscale(image_N, (f(100), f(100)))
+rect_N = image_N.get_rect()
+rect_N.center = (WIDTH * 0.3, WIDTH * 0.3)
+
+rect_resign = pygame.Rect(0, 0, 1, 1)
+rect_draw = pygame.Rect(0, 0, 1, 1)
+
 
 image_unknown_user = pygame.image.load("Assets/dark/users/unknown user.png")
 image_unknown_user = pygame.transform.smoothscale(image_unknown_user, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7 * 93 / 97))
@@ -92,11 +102,11 @@ rect_image_player = image_unknown_user.get_rect()
 rect_image_opponent = image_unknown_user.get_rect()
 
 image_flag_player = pygame.image.load("Assets/shared/flags/64/unknown.png")
-image_flag_player = pygame.transform.scale(image_flag_player, (f(20), f(20)))
+image_flag_player = pygame.transform.smoothscale(image_flag_player, (f(20), f(20)))
 rect_flag_player = image_flag_player.get_rect()
 
 image_flag_opponent = pygame.image.load("Assets/shared/flags/64/unknown.png")
-image_flag_opponent = pygame.transform.scale(image_flag_opponent, (f(20), f(20)))
+image_flag_opponent = pygame.transform.smoothscale(image_flag_opponent, (f(20), f(20)))
 rect_flag_opponent = image_flag_opponent.get_rect()
 
 image_settings = pygame.image.load("Assets/dark/options.png")
@@ -130,6 +140,7 @@ fen_start = "8/8/3k4/8/2B5/4Kb2/8/8 w - - 0 1" # king vs king and bishop draw
 fen_start = "8/4k3/8/8/2N5/4Kb2/8/8 w - - 0 1" # king vs king and knight draw
 fen_start = "8/4k3/2b5/8/2B5/4K3/3r4/8 w - - 0 1" # king and bishop vs king and bishop (same colors) draw
 fen_start = "8/2b1k3/8/8/2B5/4K3/3r4/8 w - - 0 1" # king and bishop vs king and bishop (opposite colors) not draw
+fen_start = "r3k2r/pQp2ppp/4q3/2b1nb2/2Pp3B/P6P/1P1NPPP1/3RKB1R w kq - 0 1" # smothered mate
 '''
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -286,6 +297,10 @@ class Game:
         while 1:
             # rendering "behind" the gameplay
             screen.fill(BLACKY)
+            screen.blit(image_N, rect_N)
+            rect_resign = render_text("Resign", WIDTH * 0.3, rect_N.bottom + f(100), int(f(25)))
+            rect_draw = render_text("Offer draw", WIDTH * 0.3, rect_N.bottom + f(200), int(f(25)))
+
             screen.blit(image_bg, (self.SCREEN_OFFSET_X, self.SCREEN_OFFSET_Y))
             screen.blit(image_table, rect_table)
 
@@ -348,6 +363,13 @@ class Game:
                     if rect_settings_bigger.collidepoint(event.pos):
                         self.SETTINGS_ANIMATION_RUNNING = True
                         self.SETTINGS_ANIMATION_SPEED *= -1
+                    
+                    if rect_resign.collidepoint(event.pos):
+                        self.resigned = True
+                    
+                    if rect_draw.collidepoint(event.pos):
+                        self.draw = True
+
                 if self.player_to_move == "p":
                     for piece in self.pieces_player:
                         piece.handle_event(event)
@@ -729,7 +751,6 @@ class Game:
         curr_fen += f" {self.halfmoves} {self.fullmoves}"
 
         self.fen.append(curr_fen)
-        print(self.fen[-1])
 
     def convert_fen(self, fen_string):
         # first destroy everything
@@ -962,7 +983,7 @@ class Piece(pygame.sprite.Sprite):
         self.game = game
         self.name = name
 
-        self.image = pygame.transform.scale(image, (int(SQUARE_SIZE * 0.7), int(SQUARE_SIZE * 0.7)))  # Scale image
+        self.image = pygame.transform.smoothscale(image, (int(SQUARE_SIZE * 0.7), int(SQUARE_SIZE * 0.7)))  # Scale image
         self.row = row
         self.column = column
 
