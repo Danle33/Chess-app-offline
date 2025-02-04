@@ -2,6 +2,7 @@ import pygame
 import sys
 import copy
 import weakref
+import random
 
 pygame.init()
 
@@ -396,8 +397,9 @@ class Game:
                     for piece in self.pieces_player:
                         piece.handle_event(event)
                 else:
-                    for piece in self.pieces_opponent:
-                        piece.handle_event(event)
+                    #for piece in self.pieces_opponent:
+                        #piece.handle_event(event)
+                    self.play_random_move()
                     
                 if self.promoting:
                     for piece in self.pieces_promotion:
@@ -608,6 +610,18 @@ class Game:
             render_text("Home", rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
 
             pygame.display.flip()
+
+    def play_random_move(self):
+        moves = []
+        for piece in self.pieces_opponent:
+            for square in piece.available_squares:
+                moves.append((piece, square))
+        idx = random.randint(0, len(moves) - 1)
+        piece = moves[idx][0]
+        square = moves[idx][1]
+        piece.make_move(square)
+        self.post_move_processing()
+
 
     def simulate_move(self, square1, square2):
         (prev_row, prev_column) = square1
@@ -1988,7 +2002,7 @@ while 1:
         home = None
     game = None
     
-    #print(wk1(), wk2())
+    print(wk1(), wk2())
     
 
 
