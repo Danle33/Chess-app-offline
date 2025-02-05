@@ -139,6 +139,7 @@ for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3
     piece_to_value[name] = value
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#fen_start = "K5pp/6pk/6pp/pppppppp/pppppppp/pppppppp/pppppppp/8 w - - 0 1"
 
 '''
 try_positions = []
@@ -397,14 +398,16 @@ class Game:
                     for piece in self.pieces_player:
                         piece.handle_event(event)
                 else:
-                    #for piece in self.pieces_opponent:
-                        #piece.handle_event(event)
-                    self.play_random_move()
+                    for piece in self.pieces_opponent:
+                        piece.handle_event(event)
                     
                 if self.promoting:
                     for piece in self.pieces_promotion:
                         piece.handle_event_promotion(event)
             
+            self.play_random_move()
+            if self.promoting:
+                self.promote_random_piece()
             dt = clock.tick(60) / 1000
             # after 2 moves, lenght will be 3 since starting position is also in fen
             if len(self.fen) == 3:
@@ -492,6 +495,7 @@ class Game:
             else:
                 self.winner = "White"
         # -------------------------------------------------------------------------------------------------------------------
+        pygame.time.wait(100)
         while 1:
             # rendering "behind" the gameplay
             screen.fill(BLACKY)
@@ -612,16 +616,48 @@ class Game:
             pygame.display.flip()
 
     def play_random_move(self):
+        pygame.time.wait(100)
         moves = []
-        for piece in self.pieces_opponent:
-            for square in piece.available_squares:
-                moves.append((piece, square))
+        if self.player_to_move == "p":
+            for piece in self.pieces_player:
+                for square in piece.available_squares:
+                    moves.append((piece, square))
+        else:
+            for piece in self.pieces_opponent:
+                for square in piece.available_squares:
+                    moves.append((piece, square))
         idx = random.randint(0, len(moves) - 1)
         piece = moves[idx][0]
         square = moves[idx][1]
         piece.make_move(square)
         self.post_move_processing()
 
+    def promote_random_piece(self):
+            idx = random.randint(0, 3)
+            pieces_promotion_list = list(self.pieces_promotion)
+            piece = pieces_promotion_list[idx]
+            (row, column) = self.promotion_square
+            piece.row = row
+            piece.column = column
+            self.TABLE_MATRIX[row][column] = piece.name
+
+            pawn = self.matrix_to_piece[((row, column))]
+            pawn.kill()
+
+            new_piece = Piece(piece.game, piece.name, piece.image, piece.row, piece.column, piece.names)
+            self.matrix_to_piece[((row, column))] = new_piece
+            if self.player_to_move == "p":
+                self.pieces_player.add(new_piece)            
+            else:
+                self.pieces_opponent.add(new_piece)
+
+            for piece in self.pieces_promotion:
+                piece.kill()
+            
+            self.pieces_promotion = pygame.sprite.Group()
+            self.promoting = False
+            
+            self.post_move_processing()
 
     def simulate_move(self, square1, square2):
         (prev_row, prev_column) = square1
@@ -1907,6 +1943,7 @@ class Piece(pygame.sprite.Sprite):
     def handle_event_promotion(self, event):
         if self.game.IN_SETTINGS:
             return
+
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
         mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
         left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
@@ -1976,9 +2013,11 @@ while 1:
         home = Home()
         home.run()
 
+    pygame.time.wait(200)
     game = Game(home)
     game.run()
 
+    # tracks garbage collection, doesnt affect the game logic
     wk1 = weakref.ref(home)
     wk2 = weakref.ref(game)
 
@@ -2002,7 +2041,7 @@ while 1:
         home = None
     game = None
     
-    print(wk1(), wk2())
+    #print(wk1(), wk2())
     
 
 
