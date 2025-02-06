@@ -8,9 +8,6 @@ from stockfish import Stockfish
 
 pygame.init()
 
-stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
-stockfish.set_skill_level(15)
-
 # aspect ratio 9 : 19.5
 WIDTH = 450
 HEIGHT = 975
@@ -154,8 +151,6 @@ file_to_column = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-stockfish.set_fen_position(fen_start)
-
 '''
 try_positions = []
 try_positions.append("rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3") # bishop pinning the knight
@@ -175,6 +170,7 @@ try_positions.append("8/4k3/8/8/2N5/4Kb2/8/8 w - - 0 1") # king vs king and knig
 try_positions.append("8/4k3/2b5/8/2B5/4K3/3r4/8 w - - 0 1") # king and bishop vs king and bishop (same colors) draw
 try_positions.append("8/2b1k3/8/8/2B5/4K3/3r4/8 w - - 0 1") # king and bishop vs king and bishop (opposite colors) not draw
 try_positions.append("r3k2r/pQp2ppp/4q3/2b1nb2/2Pp3B/P6P/1P1NPPP1/3RKB1R w kq - 0 1") # smothered mate
+try_positions.append("8/5P2/8/8/5k2/8/3K4/8 w - - 0 1") # promotion
 '''
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -242,9 +238,6 @@ class Game:
 
         self.minutes = home.minutes
         self.increment = home.increment
-
-        self.move = None if self.player_to_move == "p" else stockfish.get_best_move()
-        self.move_cooldown = 1
 
         self.SCREEN_OFFSET_X = self.SCREEN_OFFSET_Y = 0
         self.TABLE_X = 0
@@ -326,6 +319,17 @@ class Game:
             self.player_to_move = "o"
             (self.names_player, self.names_opponent) = (self.names_opponent, self.names_player)
             (self.route_player, self.route_opponent) = (self.route_opponent, self.route_player)
+        
+        self.best_move_stockfish = None
+        self.move_cooldown = 0.1
+
+        self.stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
+        self.stockfish.set_skill_level(15)
+        self.stockfish.set_fen_position(fen_start)
+        self.thread = None
+        self.lock = threading.Lock()
+        if self.player_to_move == "o":
+            self.get_move_in_background()
 
         self.fen.append(fen_start)
         self.convert_fen(fen_start)
@@ -410,16 +414,17 @@ class Game:
                 if self.player_to_move == "p":
                     for piece in self.pieces_player:
                         piece.handle_event(event)
-                else:
+                '''else:
                     for piece in self.pieces_opponent:
-                        piece.handle_event(event)
+                        piece.handle_event(event)'''
                     
                 if self.promoting:
                     for piece in self.pieces_promotion:
                         piece.handle_event_promotion(event)
             
             #self.play_random_move()
-            if self.player_to_move == "o" and self.move_cooldown <= 0:
+
+            if self.player_to_move == "o" and self.is_move_ready() and self.best_move_stockfish is not None:
                 self.play_move_stockfish()
                 self.post_move_processing()
             dt = clock.tick(60) / 1000
@@ -588,6 +593,10 @@ class Game:
 
             screen.blit(image_settings, rect_settings)
 
+            if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y:
+                screen.blit(moving_square_prev, rect_moving_square_prev)
+                screen.blit(moving_square_curr, rect_moving_square_curr)
+
             self.pieces_player.draw(screen)
             self.pieces_opponent.draw(screen)
 
@@ -642,13 +651,50 @@ class Game:
             pygame.display.flip()
 
     def play_move_stockfish(self):
-        move = self.move
+        move = self.best_move_stockfish
         prev_row = int(move[1]) - 1 if self.player_color == "b" else 7 - (int(move[1]) - 1)
         prev_column = file_to_column[move[0]] - 1 if self.player_color == "w" else 7 - (file_to_column[move[0]] - 1)
         curr_row = int(move[3]) - 1 if self.player_color == "b" else 7 - (int(move[3]) - 1)
         curr_column = file_to_column[move[2]] - 1 if self.player_color == "w" else 7 - (file_to_column[move[2]] - 1)
         piece = self.matrix_to_piece[(prev_row, prev_column)]
+        if piece is None:
+            self.game_end_reason = "mutual agreement"
+            print(move)
+            print(self.TABLE_MATRIX[prev_row][prev_column])
+            return
         piece.make_move((curr_row, curr_column))
+
+        # promotion
+        if len(move) == 5:
+            (row, column) = self.promotion_square
+            for piecee in self.pieces_promotion:
+                if piecee.name.lower() == move[-1].lower():
+                    piece = piecee
+                    break
+            piece.row = row
+            piece.column = column
+            self.TABLE_MATRIX[row][column] = piece.name
+
+            pawn = self.matrix_to_piece[((row, column))]
+            pawn.kill()
+
+            new_piece = Piece(piece.game, piece.name, piece.image, piece.row, piece.column, piece.names)
+            self.matrix_to_piece[((row, column))] = new_piece
+            if piece.row == 0:
+                self.pieces_player.add(new_piece)
+            elif piece.row == 7:
+                self.pieces_opponent.add(new_piece)
+
+            for piecee in self.pieces_promotion:
+                piecee.kill()
+            
+            self.pieces_promotion = pygame.sprite.Group()
+            self.promoting = False
+    
+    def is_move_ready(self):
+        if self.thread is None:
+            return False
+        return not self.thread.is_alive()
 
     def play_random_move(self):
         moves = []
@@ -799,10 +845,9 @@ class Game:
             self.player_to_move = "p"
         # update fen history
         self.scan_fen()
-        stockfish.set_fen_position(self.fen[-1])
-        self.get_move_in_background()
+        self.stockfish.set_fen_position(self.fen[-1])
         if self.player_to_move == "o":
-            self.move_cooldown = 1
+            self.get_move_in_background()
         self.enpassant_square = "-"
         
         self.update_available_squares()
@@ -815,14 +860,18 @@ class Game:
             self.clock_opponent.locked = not self.clock_opponent.locked
         self.set_game_end_reason()
         self.mark_check()
-        self.print_table_state()
 
     def get_best_move(self):
-        self.move = stockfish.get_best_move()
+        with self.lock:
+            wtime = self.clock_player.seconds_left * 1000 if self.player_color == "w" else self.clock_opponent.seconds_left * 1000
+            btime = self.clock_player.seconds_left * 1000 if self.player_color == "b" else self.clock_opponent.seconds_left * 1000
+            if self.game_end_reason is None:
+                self.best_move_stockfish = self.stockfish.get_best_move(wtime=wtime, btime=btime)
 
     def get_move_in_background(self):
-        thread = threading.Thread(target=self.get_best_move)
-        thread.start()
+        self.best_move_stockfish = None
+        self.thread = threading.Thread(target=self.get_best_move, daemon=True)
+        self.thread.start()
 
     def mark_check(self):
         if self.player_to_move == "p":
@@ -1772,7 +1821,7 @@ class Piece(pygame.sprite.Sprite):
                 self.game.matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
                 # updating rooks previous square
                 self.game.TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
-                self.game.matrix_to_piece[(rook_prev_row, rook_curr_column)] = None
+                self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)] = None
                 rook.update_available_squares()
 
             # right castling
@@ -1788,7 +1837,7 @@ class Piece(pygame.sprite.Sprite):
                 self.game.matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
                 # updating rooks previous square
                 self.game.TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
-                self.game.matrix_to_piece[(rook_prev_row, rook_curr_column)] = None
+                self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)] = None
                 rook.update_available_squares()
 
         # mark en passant square
