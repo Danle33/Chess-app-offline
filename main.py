@@ -3,8 +3,13 @@ import sys
 import copy
 import weakref
 import random
+import threading
+from stockfish import Stockfish
 
 pygame.init()
+
+stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
+stockfish.set_skill_level(15)
 
 # aspect ratio 9 : 19.5
 WIDTH = 450
@@ -19,6 +24,7 @@ clock = pygame.time.Clock()
 # ASSETS/GLOBALS
 
 WHITE = (255, 255, 255)
+WHITE2 = (170, 170, 170)
 BLACKY = (30, 30, 30)
 BLACKY1 = (20, 20, 20)
 DARK_GREEN_TRANSPARENT = (0, 50, 0, 50)
@@ -134,12 +140,21 @@ rect_gameover_button1.center = (rect_gameover_big.left + rect_gameover_big.width
 rect_gameover_button2 = image_gameover_button.get_rect()
 rect_gameover_button2.center = (rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2)
 
+image_close_button = pygame.image.load("Assets/shared/close.png")
+image_close_button = pygame.transform.smoothscale(image_close_button, (f(10), f(10)))
+rect_close_button = image_close_button.get_rect()
+
+rect_pgn = pygame.Rect(f(10), rect_image_player.bottom + f(50), WIDTH - 2 * f(10), f(30))
+
 piece_to_value = dict()
 for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3, 3, 5, 9, 1, 3, 3, 5, 9]):
     piece_to_value[name] = value
 
+file_to_column = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8}
+
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-#fen_start = "K5pp/6pk/6pp/pppppppp/pppppppp/pppppppp/pppppppp/8 w - - 0 1"
+
+stockfish.set_fen_position(fen_start)
 
 '''
 try_positions = []
@@ -217,8 +232,8 @@ class Game:
     back_to_home = True
 
     def __init__(self, home):
-        self.player_to_move = "p"
         self.player_color = home.player_color
+        self.player_to_move = "p" if self.player_color == "w" else "o"
 
         self.advantage = 0
         self.advantage_x = 0
@@ -227,6 +242,9 @@ class Game:
 
         self.minutes = home.minutes
         self.increment = home.increment
+
+        self.move = None if self.player_to_move == "p" else stockfish.get_best_move()
+        self.move_cooldown = 1
 
         self.SCREEN_OFFSET_X = self.SCREEN_OFFSET_Y = 0
         self.TABLE_X = 0
@@ -243,10 +261,6 @@ class Game:
         self.draw = False
 
         self.SETTINGS_ANIMATION_SPEED = -f(20) # pixels per frame
-
-        rect_moving_square_prev.center = (-1, -1)
-
-        rect_check_square.center = (-1, -1)
 
         # initializing table matrix, dot represents non occupied square
         self.TABLE_MATRIX = []
@@ -292,12 +306,13 @@ class Game:
 
         rect_image_player.topleft = (self.SCREEN_OFFSET_X + f(10), self.TABLE_Y + 8 * SQUARE_SIZE + f(15))
         rect_image_opponent.bottomleft = (self.SCREEN_OFFSET_X  + f(10), self.TABLE_Y - f(15))
-
         rect_flag_player.topleft = (self.SCREEN_OFFSET_X + f(200), rect_image_player.top)
-
         rect_flag_opponent.topleft = (self.SCREEN_OFFSET_X + f(192), rect_image_opponent.top)
-
         rect_settings.topleft = (self.SCREEN_OFFSET_X + f(30), self.SCREEN_OFFSET_Y + f(30))
+        rect_pgn.topleft = (f(10), rect_image_player.bottom + f(50))
+        rect_moving_square_prev.center = (-1, -1)
+        rect_check_square.center = (-1, -1)
+        rect_close_button.topright = (rect_gameover_big.right - f(10), rect_gameover_big.top + f(10))
 
         self.clock_player = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_player.top, True)
         self.clock_opponent = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top, False)
@@ -330,6 +345,7 @@ class Game:
 
             if self.SETTINGS_ANIMATION_RUNNING:
                 self.SCREEN_OFFSET_X += self.SETTINGS_ANIMATION_SPEED
+                self.TABLE_X += self.SETTINGS_ANIMATION_SPEED
                 rect_table.x += self.SETTINGS_ANIMATION_SPEED
                 rect_settings.x += self.SETTINGS_ANIMATION_SPEED
                 rect_image_player.x += self.SETTINGS_ANIMATION_SPEED
@@ -339,6 +355,7 @@ class Game:
                 rect_moving_square_prev.x += self.SETTINGS_ANIMATION_SPEED
                 rect_moving_square_curr.x += self.SETTINGS_ANIMATION_SPEED
                 rect_check_square.x += self.SETTINGS_ANIMATION_SPEED
+                rect_pgn.x += self.SETTINGS_ANIMATION_SPEED
 
                 for piece in self.pieces_player:
                     piece.update_rect_position()
@@ -379,12 +396,8 @@ class Game:
                     pygame.quit()
                     sys.exit()
                 
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    rect_settings_bigger = rect_settings.copy()
-                    rect_settings_bigger.width *= 1.5
-                    rect_settings_bigger.height *= 1.5
-                    rect_settings_bigger.center = rect_settings.center 
-                    if rect_settings_bigger.collidepoint(event.pos):
+                if event.type == pygame.MOUSEBUTTONDOWN: 
+                    if rect_settings.collidepoint(event.pos):
                         self.SETTINGS_ANIMATION_RUNNING = True
                         self.SETTINGS_ANIMATION_SPEED *= -1
                     
@@ -405,10 +418,12 @@ class Game:
                     for piece in self.pieces_promotion:
                         piece.handle_event_promotion(event)
             
-            self.play_random_move()
-            if self.promoting:
-                self.promote_random_piece()
+            #self.play_random_move()
+            if self.player_to_move == "o" and self.move_cooldown <= 0:
+                self.play_move_stockfish()
+                self.post_move_processing()
             dt = clock.tick(60) / 1000
+            self.move_cooldown -= dt
             # after 2 moves, lenght will be 3 since starting position is also in fen
             if len(self.fen) == 3:
                 if self.player_to_move == "p":
@@ -454,12 +469,15 @@ class Game:
             self.clock_player.draw()
             self.clock_opponent.draw()
 
-            if self.promoting:
-                # darken the screen
-                screen.blit(dark_overlay, (self.TABLE_X + self.SCREEN_OFFSET_X, self.TABLE_Y + self.SCREEN_OFFSET_Y))
-                self.pieces_promotion.draw(screen)
             self.clock_player.update(dt)
             self.clock_opponent.update(dt)
+
+            if self.promoting:
+                #self.promote_random_piece()
+                screen.blit(dark_overlay, (self.SCREEN_OFFSET_X, self.TABLE_Y))
+                self.pieces_promotion.draw(screen)
+            
+            pygame.draw.rect(screen, WHITE2, rect_pgn, width=max(1, f(1)), border_radius=int(f(3)))
 
             # these situations have to be checked every frame, whereas set_game_reason() gets called only after a move
             if self.clock_player.seconds_left <= 0:
@@ -494,6 +512,8 @@ class Game:
                 self.winner = "Black"
             else:
                 self.winner = "White"
+        
+        closed_dialog = False
         # -------------------------------------------------------------------------------------------------------------------
         pygame.time.wait(100)
         while 1:
@@ -515,6 +535,7 @@ class Game:
                 rect_moving_square_prev.x += self.SETTINGS_ANIMATION_SPEED
                 rect_moving_square_curr.x += self.SETTINGS_ANIMATION_SPEED
                 rect_check_square.x += self.SETTINGS_ANIMATION_SPEED
+                rect_pgn.x += self.SETTINGS_ANIMATION_SPEED
 
                 for piece in self.pieces_player:
                     piece.update_rect_position()
@@ -547,21 +568,21 @@ class Game:
                     sys.exit()
                 
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    rect_settings_bigger = rect_settings.copy()
-                    rect_settings_bigger.width *= 1.5
-                    rect_settings_bigger.height *= 1.5
-                    rect_settings_bigger.center = rect_settings.center 
-                    if rect_settings_bigger.collidepoint(event.pos):
+                    if rect_settings.collidepoint(event.pos):
                         self.SETTINGS_ANIMATION_RUNNING = True
                         self.SETTINGS_ANIMATION_SPEED *= -1
                     
-                    if rect_gameover_button1.collidepoint(event.pos):
+                    if not closed_dialog and rect_gameover_button1.collidepoint(event.pos):
                         Game.back_to_home = False
                         return
 
-                    if rect_gameover_button2.collidepoint(event.pos):
+                    if not closed_dialog and rect_gameover_button2.collidepoint(event.pos):
                         Game.back_to_home = True
                         return
+                    
+                    clickable_area = rect_close_button.inflate(f(10), f(10))
+                    if not closed_dialog and clickable_area.collidepoint(event.pos):
+                        closed_dialog = True
             
             clock.tick(60)
 
@@ -595,42 +616,54 @@ class Game:
             self.clock_player.draw()
             self.clock_opponent.draw()
 
-            screen.blit(image_gameover_big, rect_gameover_big)
-            screen.blit(image_gameover_small, rect_gameover_small)
+            if not closed_dialog:
+                screen.blit(image_gameover_big, rect_gameover_big)
+                screen.blit(image_gameover_small, rect_gameover_small)
 
-            if self.winner is None:
-                render_text("Draw", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
-            else:
-                render_text(f"{self.winner} won!", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
-            render_text(f"by {self.game_end_reason}", WIDTH / 2, rect_gameover_big.top + f(55), int(f(12)), color=GRAY)
+                if self.winner is None:
+                    render_text("Draw", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
+                else:
+                    render_text(f"{self.winner} won!", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
+                render_text(f"by {self.game_end_reason}", WIDTH / 2, rect_gameover_big.top + f(55), int(f(12)), color=GRAY)
 
-            if self.winner == "You":
-                screen.blit(image_trophy, rect_trophy)
-            
-            screen.blit(image_gameover_button, rect_gameover_button1)
-            render_text("Rematch", rect_gameover_big.left + rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
+                if self.winner == "You":
+                    screen.blit(image_trophy, rect_trophy)
+                
+                screen.blit(image_gameover_button, rect_gameover_button1)
+                render_text("Rematch", rect_gameover_big.left + rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
 
-            screen.blit(image_gameover_button, rect_gameover_button2)
-            render_text("Home", rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
+                screen.blit(image_gameover_button, rect_gameover_button2)
+                render_text("Home", rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
+
+                screen.blit(image_close_button, rect_close_button)
+
+            pygame.draw.rect(screen, WHITE2, rect_pgn, width=max(1, f(1)), border_radius=int(f(3)))
 
             pygame.display.flip()
 
+    def play_move_stockfish(self):
+        move = self.move
+        prev_row = int(move[1]) - 1 if self.player_color == "b" else 7 - (int(move[1]) - 1)
+        prev_column = file_to_column[move[0]] - 1 if self.player_color == "w" else 7 - (file_to_column[move[0]] - 1)
+        curr_row = int(move[3]) - 1 if self.player_color == "b" else 7 - (int(move[3]) - 1)
+        curr_column = file_to_column[move[2]] - 1 if self.player_color == "w" else 7 - (file_to_column[move[2]] - 1)
+        piece = self.matrix_to_piece[(prev_row, prev_column)]
+        piece.make_move((curr_row, curr_column))
+
     def play_random_move(self):
-        pygame.time.wait(100)
         moves = []
-        if self.player_to_move == "p":
-            for piece in self.pieces_player:
-                for square in piece.available_squares:
-                    moves.append((piece, square))
-        else:
+        if self.player_to_move == "o":
             for piece in self.pieces_opponent:
                 for square in piece.available_squares:
                     moves.append((piece, square))
-        idx = random.randint(0, len(moves) - 1)
-        piece = moves[idx][0]
-        square = moves[idx][1]
-        piece.make_move(square)
-        self.post_move_processing()
+            if len(moves) == 0:
+                self.post_move_processing()
+                return
+            idx = random.randint(0, len(moves) - 1)
+            piece = moves[idx][0]
+            square = moves[idx][1]
+            piece.make_move(square)
+            self.post_move_processing()
 
     def promote_random_piece(self):
             idx = random.randint(0, 3)
@@ -764,11 +797,13 @@ class Game:
             self.player_to_move = "o"
         else:
             self.player_to_move = "p"
-        
         # update fen history
-        if not self.promoting:
-            self.scan_fen()
-            self.enpassant_square = "-"
+        self.scan_fen()
+        stockfish.set_fen_position(self.fen[-1])
+        self.get_move_in_background()
+        if self.player_to_move == "o":
+            self.move_cooldown = 1
+        self.enpassant_square = "-"
         
         self.update_available_squares()
         if self.clocks_started:
@@ -780,6 +815,14 @@ class Game:
             self.clock_opponent.locked = not self.clock_opponent.locked
         self.set_game_end_reason()
         self.mark_check()
+        self.print_table_state()
+
+    def get_best_move(self):
+        self.move = stockfish.get_best_move()
+
+    def get_move_in_background(self):
+        thread = threading.Thread(target=self.get_best_move)
+        thread.start()
 
     def mark_check(self):
         if self.player_to_move == "p":
@@ -2003,14 +2046,14 @@ class Clock():
     
     def update_rect_position(self):
         if self.player:
-            self.rect.y += self.game.SETTINGS_ANIMATION_SPEED / 4
+            self.rect.y += self.game.SETTINGS_ANIMATION_SPEED * 0.7
         else:
             self.rect.y -= self.game.SETTINGS_ANIMATION_SPEED / 4
 
 # manager loop, controls current screen: home or gameplay
+home = Home()
 while 1:
     if Game.back_to_home:
-        home = Home()
         home.run()
 
     pygame.time.wait(200)
@@ -2036,9 +2079,6 @@ while 1:
     for clockk in clocks:
         clockk.game = None
     
-    if Game.back_to_home:
-        game.home = None
-        home = None
     game = None
     
     #print(wk1(), wk2())
