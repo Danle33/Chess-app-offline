@@ -29,6 +29,7 @@ DARK_GREEN_TRANSPARENT1 = (0, 50, 0, 25)
 YELLOW_TRANSPARENT = (255, 255, 0, 20)
 YELLOW_TRANSPARENT1 = (255, 255, 0, 10)
 RED_TRANSPARENT = (255, 0, 0, 50)
+RED_TRANSPARENT1 = (255, 0, 0, 25)
 GRAY = (128, 128, 128)
 
 availableMinutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
@@ -51,6 +52,9 @@ rect_moving_square_curr = moving_square_prev.get_rect()
 check_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
 check_square.fill(RED_TRANSPARENT)
 rect_check_square = check_square.get_rect()
+
+premove_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+premove_square.fill(RED_TRANSPARENT1)
 
 # renders string s with (default center) position at (x, y) and given font size
 def render_text(s, x, y, font_size, top_left=False, color=WHITE):
@@ -150,6 +154,7 @@ for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3
 file_to_column = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8}
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
 
 '''
 try_positions = []
@@ -171,6 +176,7 @@ try_positions.append("8/4k3/2b5/8/2B5/4K3/3r4/8 w - - 0 1") # king and bishop vs
 try_positions.append("8/2b1k3/8/8/2B5/4K3/3r4/8 w - - 0 1") # king and bishop vs king and bishop (opposite colors) not draw
 try_positions.append("r3k2r/pQp2ppp/4q3/2b1nb2/2Pp3B/P6P/1P1NPPP1/3RKB1R w kq - 0 1") # smothered mate
 try_positions.append("8/5P2/8/8/5k2/8/3K4/8 w - - 0 1") # promotion
+try_positions.append("8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1") # two queens vs king premoving
 '''
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -321,7 +327,13 @@ class Game:
             (self.route_player, self.route_opponent) = (self.route_opponent, self.route_player)
         
         self.best_move_stockfish = None
-        self.move_cooldown = 0.1
+        self.move_cooldown = 2
+
+        # thread-safe queue
+        self.premoves = []
+
+        self.fen.append(fen_start)
+        self.convert_fen(fen_start)
 
         self.stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
         self.stockfish.set_skill_level(15)
@@ -331,8 +343,6 @@ class Game:
         if self.player_to_move == "o":
             self.get_move_in_background()
 
-        self.fen.append(fen_start)
-        self.convert_fen(fen_start)
     
     def run(self):
         # game loop
@@ -363,8 +373,13 @@ class Game:
 
                 for piece in self.pieces_player:
                     piece.update_rect_position()
+                    piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                    piece.rect_square.center = piece.rect.center
+
                 for piece in self.pieces_opponent:
                     piece.update_rect_position()
+                    piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                    piece.rect_square.center = piece.rect.center
                 
                 for piece in self.pieces_promotion:
                     piece.update_rect_position()
@@ -390,10 +405,10 @@ class Game:
                 for piece in self.pieces_player:
                     if piece.selected:
                         piece.display_available_squares()
-            else:
+            '''else:
                 for piece in self.pieces_opponent:
                     if piece.selected:
-                        piece.display_available_squares()
+                        piece.display_available_squares()'''
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -401,7 +416,8 @@ class Game:
                     sys.exit()
                 
                 if event.type == pygame.MOUSEBUTTONDOWN: 
-                    if rect_settings.collidepoint(event.pos):
+                    clickable_area = rect_settings.inflate(f(15), f(15))
+                    if clickable_area.collidepoint(event.pos):
                         self.SETTINGS_ANIMATION_RUNNING = True
                         self.SETTINGS_ANIMATION_SPEED *= -1
                     
@@ -411,24 +427,43 @@ class Game:
                     if self.IN_SETTINGS and rect_draw.collidepoint(event.pos):
                         self.draw = True
 
-                if self.player_to_move == "p":
-                    for piece in self.pieces_player:
-                        piece.handle_event(event)
-                '''else:
-                    for piece in self.pieces_opponent:
-                        piece.handle_event(event)'''
+                for piece in self.pieces_player:
+                    piece.handle_event(event)
                     
                 if self.promoting:
                     for piece in self.pieces_promotion:
                         piece.handle_event_promotion(event)
             
             #self.play_random_move()
-
-            if self.player_to_move == "o" and self.is_move_ready() and self.best_move_stockfish is not None:
+            if self.player_to_move == "o" and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
                 self.play_move_stockfish()
                 self.post_move_processing()
+
+                if len(self.premoves) > 0:
+                    (piece, center) = self.premoves.pop(0)
+                    if piece is not None:
+                        square = piece.calc_position_matrix(center)
+                        if piece.available_move():
+                            piece.selected = False
+                            piece.dragging = False
+                            piece.holding = False
+                            piece.unselecting_downclick = False
+                            piece.make_move(square)                        
+                            self.post_move_processing()
+                        else:
+                            for piece in self.pieces_player:
+                                piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                                piece.rect_square.center = piece.rect.center
+                                piece.selected = False
+                                piece.dragging = False
+                                piece.holding = False
+
+                            self.premoves = []
+
             dt = clock.tick(60) / 1000
-            self.move_cooldown -= dt
+            if self.player_to_move == "o":
+                self.move_cooldown -= dt
+
             # after 2 moves, lenght will be 3 since starting position is also in fen
             if len(self.fen) == 3:
                 if self.player_to_move == "p":
@@ -476,6 +511,12 @@ class Game:
 
             self.clock_player.update(dt)
             self.clock_opponent.update(dt)
+
+            # render premoving squares
+            for (piece, center) in self.premoves:
+                rect_premove_square = premove_square.get_rect()
+                rect_premove_square.center = center
+                screen.blit(premove_square, rect_premove_square)
 
             if self.promoting:
                 #self.promote_random_piece()
@@ -573,7 +614,8 @@ class Game:
                     sys.exit()
                 
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if rect_settings.collidepoint(event.pos):
+                    clickable_area = rect_settings.inflate(f(15), f(15))
+                    if clickable_area.collidepoint(event.pos):
                         self.SETTINGS_ANIMATION_RUNNING = True
                         self.SETTINGS_ANIMATION_SPEED *= -1
                     
@@ -657,11 +699,6 @@ class Game:
         curr_row = int(move[3]) - 1 if self.player_color == "b" else 7 - (int(move[3]) - 1)
         curr_column = file_to_column[move[2]] - 1 if self.player_color == "w" else 7 - (file_to_column[move[2]] - 1)
         piece = self.matrix_to_piece[(prev_row, prev_column)]
-        if piece is None:
-            self.game_end_reason = "mutual agreement"
-            print(move)
-            print(self.TABLE_MATRIX[prev_row][prev_column])
-            return
         piece.make_move((curr_row, curr_column))
 
         # promotion
@@ -843,6 +880,7 @@ class Game:
             self.player_to_move = "o"
         else:
             self.player_to_move = "p"
+            self.move_cooldown = 2
         # update fen history
         self.scan_fen()
         self.stockfish.set_fen_position(self.fen[-1])
@@ -866,7 +904,7 @@ class Game:
             wtime = self.clock_player.seconds_left * 1000 if self.player_color == "w" else self.clock_opponent.seconds_left * 1000
             btime = self.clock_player.seconds_left * 1000 if self.player_color == "b" else self.clock_opponent.seconds_left * 1000
             if self.game_end_reason is None:
-                self.best_move_stockfish = self.stockfish.get_best_move(wtime=wtime, btime=btime)
+                self.best_move_stockfish = self.stockfish.get_best_move(wtime=min(30*1000, wtime), btime=min(30*1000, btime))
 
     def get_move_in_background(self):
         self.best_move_stockfish = None
@@ -1324,8 +1362,8 @@ class Piece(pygame.sprite.Sprite):
 
     # caluclates screen position of a piece based on matrix position
     def calc_position_screen(self, row, column):
-        x = self.game.TABLE_X + column * SQUARE_SIZE + SQUARE_SIZE / 2 + self.game.SCREEN_OFFSET_X
-        y = self.game.TABLE_Y + row * SQUARE_SIZE + SQUARE_SIZE / 2 + self.game.SCREEN_OFFSET_Y
+        x = self.game.TABLE_X + column * SQUARE_SIZE + SQUARE_SIZE / 2
+        y = self.game.TABLE_Y + row * SQUARE_SIZE + SQUARE_SIZE / 2
         return (int(x), int(y))
     
     # calculates row and column for a given screen position
@@ -1946,11 +1984,89 @@ class Piece(pygame.sprite.Sprite):
     def handle_event(self, event):
         if self.game.IN_SETTINGS:
             return
+        
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
         mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
         left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
         right_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 3
 
+        # handle premoves
+        if self.game.player_to_move == "o":
+            if right_click:
+                # reset premove queue
+                for piece in self.game.pieces_player:
+                    piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                    piece.rect_square.center = piece.rect.center
+                    piece.selected = False
+                    piece.dragging = False
+                    piece.holding = False
+
+                self.game.premoves = []
+                return
+
+            if left_click:
+                # if out of screen bounds
+                if not (self.game.TABLE_X  <= mouse_x <= self.game.TABLE_X + 8 * SQUARE_SIZE and self.game.TABLE_Y <= mouse_y <= self.game.TABLE_Y + 8 * SQUARE_SIZE):
+                    return
+
+                if mouse_on_piece:
+                    self.selected = True
+                    self.holding = True
+
+                # handle making a move by clicking at available square
+                elif self.selected:
+
+                    #center = self.calc_position_screen(self.row, self.column)
+                    #self.game.premoves.append((None, center))
+
+                    curr_x = max(mouse_x, self.rect.size[0] / 2)
+                    curr_x = min(curr_x, WIDTH - self.rect.size[0] / 2)
+                    curr_y = max(mouse_y, self.game.TABLE_Y + self.rect.size[1] / 2)
+                    curr_y = min(curr_y, self.game.TABLE_Y + 8 * SQUARE_SIZE - self.rect.size[1] / 2)
+
+                    self.rect.center = (curr_x, curr_y)
+                    self.rect_square.center = self.rect.center
+
+                    self.selected = False
+                    self.dragging = False
+                    self.holding = False
+                    self.unselecting_downclick = False
+
+                    (row, column) = self.calc_position_matrix(self.rect.center)
+                    self.rect.center = self.calc_position_screen(row, column)
+                    self.rect_square.center = self.rect.center
+                    self.game.premoves.append((self, self.rect.center))
+                    return
+            
+            if event.type == pygame.MOUSEBUTTONUP and mouse_on_piece:
+                if self.dragging:
+                    #center = self.calc_position_screen(self.row, self.column)
+                    #self.game.premoves.append((None, center))
+                    self.dragging = False
+                    self.selected = False
+                    (row, column) = self.calc_position_matrix(self.rect.center)
+                    self.rect.center = self.calc_position_screen(row, column)
+                    self.rect_square.center = self.rect.center
+                    self.game.premoves.append((self, self.rect.center))
+                self.holding = False
+
+            if event.type == pygame.MOUSEMOTION and mouse_on_piece and self.holding:
+                self.dragging = True
+
+            if self.dragging and self.selected:
+                # Update the position of the piece while dragging
+                curr_x = max(mouse_x, self.game.SCREEN_OFFSET_X + self.rect.size[0] / 2)
+                curr_x = min(curr_x, WIDTH - self.rect.size[0] / 2)
+                curr_y = max(mouse_y, self.game.TABLE_Y + self.rect.size[1] / 2)
+                curr_y = min(curr_y, self.game.TABLE_Y + 8 * SQUARE_SIZE - self.rect.size[1] / 2)
+
+                self.rect.center = (curr_x, curr_y)
+                self.rect_square.center = self.rect.center
+                
+                return
+            return
+
+        # else players turn handling
         if right_click:
             # reset piece position
             self.rect.center = self.calc_position_screen(self.row, self.column)
@@ -2105,7 +2221,7 @@ while 1:
     if Game.back_to_home:
         home.run()
 
-    pygame.time.wait(200)
+    pygame.time.wait(100)
     game = Game(home)
     game.run()
 
