@@ -464,14 +464,6 @@ class Game:
             if self.player_to_move == "o":
                 self.move_cooldown -= dt
 
-            # after 2 moves, lenght will be 3 since starting position is also in fen
-            if len(self.fen) == 3:
-                if self.player_to_move == "p":
-                    self.clock_player.locked = False
-                else:
-                    self.clock_opponent.locked = False
-                self.clocks_started = True
-            
             screen.blit(image_settings, rect_settings)
 
             if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y:
@@ -560,6 +552,14 @@ class Game:
                 self.winner = "White"
         
         closed_dialog = False
+        for piece in self.pieces_player:
+            piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+            piece.rect_square.center = piece.rect.center
+            piece.selected = False
+            piece.dragging = False
+            piece.holding = False
+
+        self.premoves = []
         # -------------------------------------------------------------------------------------------------------------------
         pygame.time.wait(100)
         while 1:
@@ -881,14 +881,24 @@ class Game:
         else:
             self.player_to_move = "p"
             self.move_cooldown = 2
+        
+        # start clocks
+        if len(self.fen) == 2:
+            if self.player_to_move == "p":
+                self.clock_opponent.locked = False
+            else:
+                self.clock_player.locked = False
+            self.clocks_started = True
+
         # update fen history
         self.scan_fen()
         self.stockfish.set_fen_position(self.fen[-1])
-        if self.player_to_move == "o":
+        self.update_available_squares()
+        self.set_game_end_reason()
+        if self.player_to_move == "o" and self.game_end_reason is None:
             self.get_move_in_background()
         self.enpassant_square = "-"
         
-        self.update_available_squares()
         if self.clocks_started:
             if self.player_to_move == "p":
                 self.clock_opponent.seconds_left += self.increment
@@ -896,15 +906,13 @@ class Game:
                 self.clock_player.seconds_left += self.increment
             self.clock_player.locked = not self.clock_player.locked
             self.clock_opponent.locked = not self.clock_opponent.locked
-        self.set_game_end_reason()
         self.mark_check()
 
     def get_best_move(self):
         with self.lock:
             wtime = self.clock_player.seconds_left * 1000 if self.player_color == "w" else self.clock_opponent.seconds_left * 1000
             btime = self.clock_player.seconds_left * 1000 if self.player_color == "b" else self.clock_opponent.seconds_left * 1000
-            if self.game_end_reason is None:
-                self.best_move_stockfish = self.stockfish.get_best_move(wtime=min(30*1000, wtime), btime=min(30*1000, btime))
+            self.best_move_stockfish = self.stockfish.get_best_move(wtime=min(30*1000, wtime), btime=min(30*1000, btime))
 
     def get_move_in_background(self):
         self.best_move_stockfish = None
