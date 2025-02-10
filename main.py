@@ -154,7 +154,7 @@ for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3
 file_to_column = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8}
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
+#fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
 
 '''
 try_positions = []
@@ -445,7 +445,7 @@ class Game:
                         piece.handle_event_promotion(event)
             
             #self.play_random_move()
-            if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
+            if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None:
                 self.play_move_stockfish()
                 self.post_move_processing()
                 
