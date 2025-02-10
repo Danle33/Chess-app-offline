@@ -177,6 +177,8 @@ try_positions.append("8/2b1k3/8/8/2B5/4K3/3r4/8 w - - 0 1") # king and bishop vs
 try_positions.append("r3k2r/pQp2ppp/4q3/2b1nb2/2Pp3B/P6P/1P1NPPP1/3RKB1R w kq - 0 1") # smothered mate
 try_positions.append("8/5P2/8/8/5k2/8/3K4/8 w - - 0 1") # promotion
 try_positions.append("8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1") # two queens vs king premoving
+try_positions.append("2k5/1n6/8/8/8/8/6p1/4K2R w K - 0 1") # castling through pawn check
+try_positions.append("R2Q4/5pbk/2p3p1/3b4/4p1B1/7P/1q1P1P2/4K3 w - - 0 1") # queen giving check being defended by a pinned bishop
 '''
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -320,7 +322,7 @@ class Game:
         self.names_player = ['P', 'N', 'B', 'R', 'Q', 'K']
         self.names_opponent = [piece.lower() for piece in self.names_player]
 
-        # if player is indeed black, switch player route to blacks and change piece names to lowercase, also replace king and queen
+        # if player is indeed black, switch player route to blacks
         if self.player_color == "b":
             self.player_to_move = "o"
             (self.names_player, self.names_opponent) = (self.names_opponent, self.names_player)
@@ -329,7 +331,8 @@ class Game:
         self.best_move_stockfish = None
         self.move_cooldown = 2
 
-        # thread-safe queue
+        self.stockfish_active = True
+
         self.premoves = []
 
         self.fen.append(fen_start)
@@ -339,8 +342,9 @@ class Game:
         self.stockfish.set_skill_level(15)
         self.stockfish.set_fen_position(fen_start)
         self.thread = None
-        self.lock = threading.Lock()
-        if self.player_to_move == "o":
+        if self.stockfish_active:
+            self.lock = threading.Lock()
+        if self.player_to_move == "o" and self.stockfish_active:
             self.get_move_in_background()
 
     
@@ -405,10 +409,10 @@ class Game:
                 for piece in self.pieces_player:
                     if piece.selected:
                         piece.display_available_squares()
-            '''else:
+            else:
                 for piece in self.pieces_opponent:
                     if piece.selected:
-                        piece.display_available_squares()'''
+                        piece.display_available_squares()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -427,23 +431,29 @@ class Game:
                     if self.IN_SETTINGS and rect_draw.collidepoint(event.pos):
                         self.draw = True
 
+
+
                 for piece in self.pieces_player:
                     piece.handle_event(event)
+                
+                if self.player_to_move == "o" and not self.stockfish_active:
+                    for piece in self.pieces_opponent:
+                        piece.handle_event(event)
                     
-                if self.promoting:
+                if self.player_to_move == "p" and self.promoting:
                     for piece in self.pieces_promotion:
                         piece.handle_event_promotion(event)
             
             #self.play_random_move()
-            if self.player_to_move == "o" and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
+            if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
                 self.play_move_stockfish()
                 self.post_move_processing()
-
+                
                 if len(self.premoves) > 0:
                     (piece, center) = self.premoves.pop(0)
                     if piece is not None:
                         square = piece.calc_position_matrix(center)
-                        if piece.available_move():
+                        if piece.available_move(square):
                             piece.selected = False
                             piece.dragging = False
                             piece.holding = False
@@ -1803,10 +1813,10 @@ class Piece(pygame.sprite.Sprite):
             else:
                 pygame.draw.circle(screen, BLACKY1, (x, y), f(7), 0)
     
-    def available_move(self):
+    def available_move(self, square=None):
         # catches the current (x, y) coordinates of a piece while being dragged accross the board and checks if the chosen square is available
         (row_try, column_try) = self.calc_position_matrix(self.rect_square.center)
-        return (row_try, column_try) in self.available_squares
+        return (row_try, column_try) in self.available_squares if square is None else square in self.available_squares
     
     def make_move(self, square=None):
 
@@ -1922,8 +1932,15 @@ class Piece(pygame.sprite.Sprite):
                 self.game.TABLE_MATRIX[self.row - 1][self.column] = '.'
                 self.game.matrix_to_piece[(self.row, self.column)] = None
 
-        self.rect.center = self.calc_position_screen(self.row, self.column)
-        self.rect_square.center = self.rect.center
+        # check if current piece is waiting in premoves
+        in_premoves = False
+        for (piece, square) in self.game.premoves:
+            if self is piece:
+                in_premoves = True
+                break
+        if not in_premoves:
+            self.rect.center = self.calc_position_screen(self.row, self.column)
+            self.rect_square.center = self.rect.center
 
         # check if it was capture
         if self.game.TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
@@ -1999,7 +2016,7 @@ class Piece(pygame.sprite.Sprite):
         right_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 3
 
         # handle premoves
-        if self.game.player_to_move == "o":
+        if self.game.player_to_move == "o" and self.game.stockfish_active:
             if right_click:
                 # reset premove queue
                 for piece in self.game.pieces_player:
@@ -2223,7 +2240,7 @@ class Clock():
         else:
             self.rect.y -= self.game.SETTINGS_ANIMATION_SPEED / 4
 
-# manager loop, controls current screen: home or gameplay
+# manager loop, controls current state: home or gameplay
 home = Home()
 while 1:
     if Game.back_to_home:
