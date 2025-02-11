@@ -152,6 +152,9 @@ for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3
     piece_to_value[name] = value
 
 file_to_column = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8}
+column_to_file = dict()
+for file, column in file_to_column.items():
+    column_to_file[column] = file
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
@@ -271,6 +274,10 @@ class Game:
         # fen code, list of strings where every string describes one position
         self.fen = []
 
+        # list of moves represented in extended algebraic notation
+        self.algebraic = []
+        self.curr_algebraic = ""
+
         # mapping position to how many times it occured, used for threefold repetition detection
         self.fen_count = dict()
 
@@ -331,7 +338,7 @@ class Game:
         self.best_move_stockfish = None
         self.move_cooldown = 2
 
-        self.stockfish_active = True
+        self.stockfish_active = False
 
         self.premoves = []
 
@@ -445,30 +452,29 @@ class Game:
                         piece.handle_event_promotion(event)
             
             #self.play_random_move()
-            if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None:
+            if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
                 self.play_move_stockfish()
                 self.post_move_processing()
                 
                 if len(self.premoves) > 0:
                     (piece, center) = self.premoves.pop(0)
-                    if piece is not None:
-                        square = piece.calc_position_matrix(center)
-                        if piece.available_move(square):
+                    square = piece.calc_position_matrix(center)
+                    if piece.available_move(square):
+                        piece.selected = False
+                        piece.dragging = False
+                        piece.holding = False
+                        piece.unselecting_downclick = False
+                        piece.make_move(square)                        
+                        self.post_move_processing()
+                    else:
+                        for piece in self.pieces_player:
+                            piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                            piece.rect_square.center = piece.rect.center
                             piece.selected = False
                             piece.dragging = False
                             piece.holding = False
-                            piece.unselecting_downclick = False
-                            piece.make_move(square)                        
-                            self.post_move_processing()
-                        else:
-                            for piece in self.pieces_player:
-                                piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
-                                piece.rect_square.center = piece.rect.center
-                                piece.selected = False
-                                piece.dragging = False
-                                piece.holding = False
 
-                            self.premoves = []
+                        self.premoves = []
 
             dt = clock.tick(60) / 1000
             if self.player_to_move == "o":
@@ -900,12 +906,13 @@ class Game:
                 self.clock_player.locked = False
             self.clocks_started = True
 
-        # update fen history
+        # update fen
         self.scan_fen()
         self.stockfish.set_fen_position(self.fen[-1])
         self.update_available_squares()
+        self.mark_check()
         self.set_game_end_reason()
-        if self.player_to_move == "o" and self.game_end_reason is None:
+        if self.player_to_move == "o" and self.game_end_reason is None and self.stockfish_active:
             self.get_move_in_background()
         self.enpassant_square = "-"
         
@@ -916,7 +923,13 @@ class Game:
                 self.clock_player.seconds_left += self.increment
             self.clock_player.locked = not self.clock_player.locked
             self.clock_opponent.locked = not self.clock_opponent.locked
-        self.mark_check()
+        # mark algebraic
+        if len(self.fen) % 2 == 0:
+            self.algebraic.append([])
+            self.algebraic[-1].append(self.curr_algebraic)
+        else:
+            self.algebraic[-1].append(self.curr_algebraic)
+        print(self.algebraic)
 
     def get_best_move(self):
         with self.lock:
@@ -939,6 +952,7 @@ class Game:
             for piece in self.pieces_opponent:
                 if (king.row, king.column) in piece.available_squares:
                     rect_check_square.center = king.calc_position_screen(king.row, king.column)
+                    self.curr_algebraic += "+"
                     return
         else:
             for piece in self.pieces_opponent:
@@ -949,6 +963,7 @@ class Game:
             for piece in self.pieces_player:
                 if (king.row, king.column) in piece.available_squares:
                     rect_check_square.center = king.calc_position_screen(king.row, king.column)
+                    self.curr_algebraic += "+"
                     return
         
         rect_check_square.center = (-1, -1)
@@ -986,12 +1001,21 @@ class Game:
             for piece in self.pieces_player:
                 if len(piece.available_squares) > 0:
                     return False
-            return self.in_check()
+            
+            if self.in_check():
+                # its mate
+                self.curr_algebraic = self.curr_algebraic[:-1] + "#"
+                return True
+            return False
         else:
             for piece in self.pieces_opponent:
                 if len(piece.available_squares) > 0:
                     return False
-            return self.in_check()
+            if self.in_check():
+                # its mate
+                self.curr_algebraic = self.curr_algebraic[:-1] + "#"
+                return True
+            return False
 
     def stalemate(self):
         if self.player_to_move == "p":
@@ -1819,6 +1843,15 @@ class Piece(pygame.sprite.Sprite):
         return (row_try, column_try) in self.available_squares if square is None else square in self.available_squares
     
     def make_move(self, square=None):
+        
+        self.game.curr_algebraic = ""
+        if self.name not in ["P", "p"]:
+            self.game.curr_algebraic += self.name.upper()
+        
+        column = self.column + 1 if self.game.player_color == "w" else 8 - self.column
+        file = column_to_file[column]
+        row = self.row + 1 if self.game.player_color == "b" else 8 - self.row
+        self.game.curr_algebraic += (file + str(row))
 
         # mark previous square as available
         self.game.TABLE_MATRIX[self.row][self.column] = '.'
@@ -1862,40 +1895,6 @@ class Piece(pygame.sprite.Sprite):
         (x, y) = self.calc_position_screen(self.row, self.column)
         rect_moving_square_curr.center = (x, y)
 
-        # handle castling by checking if king somehow "moved" two squares
-        if self.name in ["K", "k"]:
-            # left castling
-            if self.column + 2 == prev_column:
-                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 0), (self.row, self.column + 1))
-
-                rook = self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)]
-                # updating rooks current square
-                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
-                rook.rect_square.center = rook.rect.center
-                (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                self.game.TABLE_MATRIX[rook_curr_row][rook_curr_column] = rook.name
-                self.game.matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
-                # updating rooks previous square
-                self.game.TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
-                self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)] = None
-                rook.update_available_squares()
-
-            # right castling
-            if prev_column + 2 == self.column:
-                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 7), (self.row, self.column - 1))
-
-                rook = self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)]
-                # updating rooks current square
-                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
-                rook.rect_square.center = rook.rect.center
-                (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
-                self.game.TABLE_MATRIX[rook_curr_row][rook_curr_column] = rook.name
-                self.game.matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
-                # updating rooks previous square
-                self.game.TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
-                self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)] = None
-                rook.update_available_squares()
-
         # mark en passant square
         if self.name in ["P", "p"]:
             self.game.halfmoves = 0
@@ -1909,6 +1908,7 @@ class Piece(pygame.sprite.Sprite):
         
         # capturing enpassant by checking if pawn moved diagonally to an empty square
         if self.name in ["P", "p"] and prev_column != self.column and self.game.TABLE_MATRIX[self.row][self.column] == '.':
+            self.game.curr_algebraic += "x"
             if self.game.TABLE_MATRIX[self.row + 1][self.column] in ["P", "p"]:
                 self.game.halfmoves = 0
                 captured_piece = self.game.matrix_to_piece[((self.row + 1, self.column))]
@@ -1932,18 +1932,9 @@ class Piece(pygame.sprite.Sprite):
                 self.game.TABLE_MATRIX[self.row - 1][self.column] = '.'
                 self.game.matrix_to_piece[(self.row, self.column)] = None
 
-        # check if current piece is waiting in premoves
-        in_premoves = False
-        for (piece, square) in self.game.premoves:
-            if self is piece:
-                in_premoves = True
-                break
-        if not in_premoves:
-            self.rect.center = self.calc_position_screen(self.row, self.column)
-            self.rect_square.center = self.rect.center
-
         # check if it was capture
         if self.game.TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
+            self.game.curr_algebraic += "x"
             self.game.halfmoves = 0
             captured_piece = self.game.matrix_to_piece[((self.row, self.column))]
             if self.names == self.game.names_player:
@@ -1969,6 +1960,65 @@ class Piece(pygame.sprite.Sprite):
             
             captured_piece.kill()
             self.game.matrix_to_piece[(self.row, self.column)] = None
+        
+        column = self.column + 1 if self.game.player_color == "w" else 8 - self.column
+        file = column_to_file[column]
+        row = self.row + 1 if self.game.player_color == "b" else 8 - self.row
+        self.game.curr_algebraic += (file + str(row))
+
+        # handle castling by checking if king somehow "moved" two squares
+        if self.name in ["K", "k"]:
+            # left castling
+            if self.column + 2 == prev_column:
+                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 0), (self.row, self.column + 1))
+
+                if abs(rook_prev_column - rook_curr_column) == 3:
+                    self.game.curr_algebraic = "0-0-0"
+                else:
+                    self.game.curr_algebraic = "0-0"
+
+                rook = self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)]
+                # updating rooks current square
+                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
+                rook.rect_square.center = rook.rect.center
+                (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
+                self.game.TABLE_MATRIX[rook_curr_row][rook_curr_column] = rook.name
+                self.game.matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
+                # updating rooks previous square
+                self.game.TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
+                self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)] = None
+                rook.update_available_squares()
+
+            # right castling
+            if prev_column + 2 == self.column:
+                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 7), (self.row, self.column - 1))
+
+                if abs(rook_prev_column - rook_curr_column) == 3:
+                    self.game.curr_algebraic = "0-0-0"
+                else:
+                    self.game.curr_algebraic = "0-0"
+
+                rook = self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)]
+                # updating rooks current square
+                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
+                rook.rect_square.center = rook.rect.center
+                (rook.row, rook.column) = rook.calc_position_matrix(rook.rect_square.center)
+                self.game.TABLE_MATRIX[rook_curr_row][rook_curr_column] = rook.name
+                self.game.matrix_to_piece[(rook_curr_row, rook_curr_column)] = rook
+                # updating rooks previous square
+                self.game.TABLE_MATRIX[rook_prev_row][rook_prev_column] = '.'
+                self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)] = None
+                rook.update_available_squares()
+        
+        # check if current piece is waiting in premoves
+        in_premoves = False
+        for (piece, square) in self.game.premoves:
+            if self is piece:
+                in_premoves = True
+                break
+        if not in_premoves:
+            self.rect.center = self.calc_position_screen(self.row, self.column)
+            self.rect_square.center = self.rect.center
         
         # if its not a pawn move nor a capture, increment halfmoves
         if not self.name in ["P", "p"] and not self.game.TABLE_MATRIX[self.row][self.column] != '.':
@@ -2005,6 +2055,12 @@ class Piece(pygame.sprite.Sprite):
                     row -= 1
                 # dont actually make a move, game might end before player chooses a piece
                 (self.row, self.column) = (prev_row, prev_column)
+
+    def make_premove(self):
+        (row, column) = self.calc_position_matrix(self.rect.center)
+        self.rect.center = self.calc_position_screen(row, column)
+        self.rect_square.center = self.rect.center
+        self.game.premoves.append((self, self.rect.center))
 
     def handle_event(self, event):
         if self.game.IN_SETTINGS:
@@ -2056,11 +2112,8 @@ class Piece(pygame.sprite.Sprite):
                     self.dragging = False
                     self.holding = False
                     self.unselecting_downclick = False
-
-                    (row, column) = self.calc_position_matrix(self.rect.center)
-                    self.rect.center = self.calc_position_screen(row, column)
-                    self.rect_square.center = self.rect.center
-                    self.game.premoves.append((self, self.rect.center))
+                    self.make_premove()
+                    
                     return
             
             if event.type == pygame.MOUSEBUTTONUP and mouse_on_piece:
@@ -2069,10 +2122,7 @@ class Piece(pygame.sprite.Sprite):
                     #self.game.premoves.append((None, center))
                     self.dragging = False
                     self.selected = False
-                    (row, column) = self.calc_position_matrix(self.rect.center)
-                    self.rect.center = self.calc_position_screen(row, column)
-                    self.rect_square.center = self.rect.center
-                    self.game.premoves.append((self, self.rect.center))
+                    self.make_premove()
                 self.holding = False
 
             if event.type == pygame.MOUSEMOTION and mouse_on_piece and self.holding:
@@ -2191,6 +2241,7 @@ class Piece(pygame.sprite.Sprite):
             pawn = self.game.matrix_to_piece[((row, column))]
             pawn.kill()
 
+            self.game.curr_algebraic += f"={self.name.upper()}"
             new_piece = Piece(self.game, self.name, self.image, self.row, self.column, self.names)
             self.game.matrix_to_piece[((row, column))] = new_piece
             if self.row == 0:
