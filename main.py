@@ -29,7 +29,7 @@ DARK_GREEN_TRANSPARENT1 = (0, 50, 0, 25)
 YELLOW_TRANSPARENT = (255, 255, 0, 20)
 YELLOW_TRANSPARENT1 = (255, 255, 0, 10)
 RED_TRANSPARENT = (255, 0, 0, 50)
-RED_TRANSPARENT1 = (255, 0, 0, 25)
+PURPLE_TRANSPARENT = (100, 0, 150, 25)
 GRAY = (128, 128, 128)
 
 availableMinutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
@@ -54,7 +54,7 @@ check_square.fill(RED_TRANSPARENT)
 rect_check_square = check_square.get_rect()
 
 premove_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-premove_square.fill(RED_TRANSPARENT1)
+premove_square.fill(PURPLE_TRANSPARENT)
 
 # renders string s with (default center) position at (x, y) and given font size
 def render_text(s, x, y, font_size, top_left=False, color=WHITE):
@@ -182,6 +182,7 @@ try_positions.append("8/5P2/8/8/5k2/8/3K4/8 w - - 0 1") # promotion
 try_positions.append("8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1") # two queens vs king premoving
 try_positions.append("2k5/1n6/8/8/8/8/6p1/4K2R w K - 0 1") # castling through pawn check
 try_positions.append("R2Q4/5pbk/2p3p1/3b4/4p1B1/7P/1q1P1P2/4K3 w - - 0 1") # queen giving check being defended by a pinned bishop
+try_positions.append("r2k4/1P5R/8/8/8/8/8/3K4 w - - 0 1") # promotion while capturing into a checkmate (hell yeah)
 '''
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -338,7 +339,7 @@ class Game:
         self.best_move_stockfish = None
         self.move_cooldown = 2
 
-        self.stockfish_active = False
+        self.stockfish_active = True
 
         self.premoves = []
 
@@ -346,7 +347,7 @@ class Game:
         self.convert_fen(fen_start)
 
         self.stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
-        self.stockfish.set_skill_level(15)
+        self.stockfish.set_skill_level(20)
         self.stockfish.set_fen_position(fen_start)
         self.thread = None
         if self.stockfish_active:
@@ -438,8 +439,6 @@ class Game:
                     if self.IN_SETTINGS and rect_draw.collidepoint(event.pos):
                         self.draw = True
 
-
-
                 for piece in self.pieces_player:
                     piece.handle_event(event)
                 
@@ -451,7 +450,6 @@ class Game:
                     for piece in self.pieces_promotion:
                         piece.handle_event_promotion(event)
             
-            #self.play_random_move()
             if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
                 self.play_move_stockfish()
                 self.post_move_processing()
@@ -929,7 +927,7 @@ class Game:
             self.algebraic[-1].append(self.curr_algebraic)
         else:
             self.algebraic[-1].append(self.curr_algebraic)
-        print(self.algebraic)
+        print(self.algebraic[-1])
 
     def get_best_move(self):
         with self.lock:
@@ -1934,14 +1932,16 @@ class Piece(pygame.sprite.Sprite):
 
         # check if it was capture
         if self.game.TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
+            
+            captured_piece = self.game.matrix_to_piece[((self.row, self.column))]
             self.game.curr_algebraic += "x"
             self.game.halfmoves = 0
-            captured_piece = self.game.matrix_to_piece[((self.row, self.column))]
             if self.names == self.game.names_player:
                 self.game.advantage += piece_to_value[captured_piece.name]
             else:
                 self.game.advantage -= piece_to_value[captured_piece.name]
             self.game.process_captured_piece(captured_piece.name)
+
             # disable capturing when rook gets taken
             if self.game.TABLE_MATRIX[self.row][self.column] in ["R", "r"] and not captured_piece.moved:
                 if captured_piece.name == "R":
@@ -2249,12 +2249,37 @@ class Piece(pygame.sprite.Sprite):
             elif self.row == 7:
                 self.game.pieces_opponent.add(new_piece)
 
+            # promoting a piece is equivalent to losing a pawn but capturing opponents piece (chosen one), materialwise
+            self.game.process_captured_piece(self.name)
+
+            # lil simulation
+            if self.game.player_to_move == "p":
+                self.game.player_to_move = "o"
+            else:
+                self.game.player_to_move = "p"
+
+            self.game.process_captured_piece("p")
+
+            if self.game.player_to_move == "p":
+                self.game.player_to_move = "o"
+            else:
+                self.game.player_to_move = "p"
+            
+            # update advantage
+            if self.names == self.game.names_player:
+                self.game.advantage += piece_to_value[self.name]
+                self.game.advantage -= piece_to_value["p"]
+            else:
+                self.game.advantage -= piece_to_value[self.name]
+                self.game.advantage += piece_to_value["p"]
+            
+
             for piece in self.game.pieces_promotion:
                 piece.kill()
             
             self.game.pieces_promotion = pygame.sprite.Group()
             self.game.promoting = False
-            
+
             self.game.post_move_processing()
 
 class Clock():
