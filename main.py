@@ -32,8 +32,9 @@ RED_TRANSPARENT = (255, 0, 0, 50)
 PURPLE_TRANSPARENT = (100, 0, 150, 25)
 GRAY = (128, 128, 128)
 
-availableMinutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
-availableIncrements = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 60]
+available_minutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
+available_increments = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 60]
+available_strengths = list(range(1, 21))
 
 SQUARE_SIZE = WIDTH / 8
 
@@ -151,6 +152,22 @@ rect_close_button = image_close_button.get_rect()
 
 rect_pgn = pygame.Rect(-1, rect_image_player.bottom + f(50), WIDTH + 2, f(30))
 
+image_fast_backward = pygame.image.load("Assets/dark/pgn controlls/first.png")
+image_fast_backward = pygame.transform.smoothscale(image_fast_backward, (f(35), f(35) * 80 / 88))
+rect_fast_backward = image_fast_backward.get_rect()
+
+image_backward = pygame.image.load("Assets/dark/pgn controlls/previous.png")
+image_backward = pygame.transform.smoothscale(image_backward, (f(35), f(35) * 80 / 88))
+rect_backward = image_backward.get_rect()
+
+image_forward = pygame.image.load("Assets/dark/pgn controlls/next.png")
+image_forward = pygame.transform.smoothscale(image_forward, (f(35), f(35) * 80 / 88))
+rect_forward = image_forward.get_rect()
+
+image_fast_forward = pygame.image.load("Assets/dark/pgn controlls/last.png")
+image_fast_forward = pygame.transform.smoothscale(image_fast_forward, (f(35), f(35) * 80 / 88))
+rect_fast_forward = image_fast_forward.get_rect()
+
 piece_to_value = dict()
 for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3, 3, 5, 9, 1, 3, 3, 5, 9]):
     piece_to_value[name] = value
@@ -162,7 +179,7 @@ for file, column in file_to_column.items():
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
-fen_start = "8/5P2/8/8/5k2/8/3K4/8 w - - 0 1"
+#fen_start = "8/5P2/8/8/5k2/8/3K4/8 w - - 0 1"
 '''
 try_positions = []
 try_positions.append("rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3") # bishop pinning the knight
@@ -196,11 +213,14 @@ class Home:
     def __init__(self):
         self.minutes = 3
         self.increment = 2
+        self.strength = 10
         self.slider1 = Slider(f(200))
         # set 3+2 mode manually
         self.slider1.rect_cursor.x += f(120)
-        self.slider2 = Slider(f(400))
+        self.slider2 = Slider(f(350))
         self.slider2.rect_cursor.x += f(60)
+        self.slider3 = Slider(f(500))
+        self.slider3.rect_cursor.centerx = WIDTH / 2
     
     def run(self):
         while 1:
@@ -211,6 +231,7 @@ class Home:
 
                 self.slider1.handle_event(event)
                 self.slider2.handle_event(event)
+                self.slider3.handle_event(event)
                 
                 # handle clicking on kings
                 if event.type == pygame.MOUSEBUTTONDOWN:
@@ -235,7 +256,11 @@ class Home:
             self.slider2.calc_based_on_cursor(self, 2)
             render_text(f"Increment in seconds: {self.increment}", WIDTH / 2, self.slider2.y - f(40), int(f(20)))
 
-            render_text("Choose side", WIDTH / 2, rect_k.center[1] - f(150), int(f(25)))
+            self.slider3.draw()
+            self.slider3.calc_based_on_cursor(self, 3)
+            render_text(f"Stockfish strength: {self.strength}", WIDTH / 2, self.slider3.y - f(40), int(f(20)))
+
+            render_text("Choose side", WIDTH / 2, rect_k.center[1] - f(125), int(f(25)))
 
             pygame.display.flip()
             clock.tick(60)
@@ -254,6 +279,7 @@ class Game:
 
         self.minutes = home.minutes
         self.increment = home.increment
+        self.strength = home.strength
 
         self.SCREEN_OFFSET_X = self.SCREEN_OFFSET_Y = 0
         self.TABLE_X = 0
@@ -281,9 +307,8 @@ class Game:
         self.move_index = len(self.fen) - 1
 
         # list of moves represented in extended algebraic notation
-        self.algebraic = []
+        self.algebraic = [""]
         self.curr_algebraic = ""
-        self.algebraic_index = 0
         self.algebraic_text = ""
 
         # mapping position to how many times it occured, used for threefold repetition detection
@@ -327,10 +352,15 @@ class Game:
         rect_flag_player.topleft = (self.SCREEN_OFFSET_X + f(200), rect_image_player.top)
         rect_flag_opponent.topleft = (self.SCREEN_OFFSET_X + f(192), rect_image_opponent.top)
         rect_settings.topleft = (self.SCREEN_OFFSET_X + f(30), self.SCREEN_OFFSET_Y + f(30))
-        rect_pgn.topleft = (-1, rect_image_player.bottom + f(50))
+        rect_pgn.topleft = (-1, rect_image_player.bottom + f(30))
         rect_moving_square_prev.center = (-1, -1)
         rect_check_square.center = (-1, -1)
         rect_close_button.topright = (rect_gameover_big.right - f(10), rect_gameover_big.top + f(10))
+        rect_fast_backward.topleft = (f(10), rect_pgn.bottom + f(10))
+        rect_backward.topleft = (rect_fast_backward.right + f(10), rect_pgn.bottom + f(10))
+        rect_fast_forward.topright = (rect_pgn.right - f(10), rect_pgn.bottom + f(10))
+        rect_forward.topright = (rect_fast_forward.left - f(10), rect_pgn.bottom + f(10))
+
 
         self.clock_player = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_player.top, True)
         self.clock_opponent = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top, False)
@@ -356,7 +386,7 @@ class Game:
         self.convert_fen(fen_start)
 
         self.stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
-        self.stockfish.set_skill_level(20)
+        self.stockfish.set_skill_level(self.strength)
         self.stockfish.set_fen_position(fen_start)
         self.thread = None
         if self.stockfish_active:
@@ -379,6 +409,8 @@ class Game:
             screen.blit(image_table, rect_table)
 
             if self.SETTINGS_ANIMATION_RUNNING:
+                self.reset_premoves()
+
                 self.SCREEN_OFFSET_X += self.SETTINGS_ANIMATION_SPEED
                 self.TABLE_X += self.SETTINGS_ANIMATION_SPEED
                 rect_table.x += self.SETTINGS_ANIMATION_SPEED
@@ -391,6 +423,10 @@ class Game:
                 rect_moving_square_curr.x += self.SETTINGS_ANIMATION_SPEED
                 rect_check_square.x += self.SETTINGS_ANIMATION_SPEED
                 rect_pgn.x += self.SETTINGS_ANIMATION_SPEED
+                rect_fast_backward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_backward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_forward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_fast_forward.x += self.SETTINGS_ANIMATION_SPEED
 
                 for piece in self.pieces_player:
                     piece.update_rect_position()
@@ -447,34 +483,58 @@ class Game:
                     
                     if self.IN_SETTINGS and rect_draw.collidepoint(event.pos):
                         self.draw = True
+                    
+                    # handle parallel universe
+                    if rect_fast_backward.collidepoint(event.pos):
+                        self.move_index = 0
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
+                    
+                    if rect_backward.collidepoint(event.pos):
+                        if self.move_index >= 1:
+                            self.move_index -= 1
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
+                    
+                    if rect_forward.collidepoint(event.pos):
+                        if self.move_index <= len(self.fen) - 2:
+                            self.move_index += 1
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
+                    
+                    if rect_fast_forward.collidepoint(event.pos):
+                        self.move_index = len(self.fen) - 1
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
                 
                 if event.type == pygame.KEYDOWN and not self.promoting:
                     if event.key == pygame.K_LEFT:
                         if self.move_index >= 1:
                             self.move_index -= 1
-                            for piece in self.pieces_player:
-                                piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
-                                piece.rect_square.center = piece.rect.center
-                                piece.selected = False
-                                piece.dragging = False
-                                piece.holding = False
 
-                            self.premoves = []
-                            self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
-                            self.convert_fen(self.fen[self.move_index])
                     if event.key == pygame.K_RIGHT:
                         if self.move_index <= len(self.fen) - 2:
                             self.move_index += 1
-                            for piece in self.pieces_player:
-                                piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
-                                piece.rect_square.center = piece.rect.center
-                                piece.selected = False
-                                piece.dragging = False
-                                piece.holding = False
+                    
+                    if event.key == pygame.K_DOWN:
+                        self.move_index = 0
+                    
+                    if event.key == pygame.K_UP:
+                        self.move_index = len(self.fen) - 1
+                
+                    self.reset_premoves()
 
-                            self.premoves = []
-                            self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
-                            self.convert_fen(self.fen[self.move_index])
+                    self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                    self.convert_fen(self.fen[self.move_index])
+                    self.algebraic_to_text()
 
                 for piece in self.pieces_player:
                     piece.handle_event(event)
@@ -506,14 +566,7 @@ class Game:
                         piece.make_move(square)                        
                         self.post_move_processing()
                     else:
-                        for piece in self.pieces_player:
-                            piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
-                            piece.rect_square.center = piece.rect.center
-                            piece.selected = False
-                            piece.dragging = False
-                            piece.holding = False
-
-                        self.premoves = []
+                        self.reset_premoves()
 
             dt = clock.tick(60) / 1000
             if self.player_to_move == "o":
@@ -569,9 +622,14 @@ class Game:
                 #self.promote_random_piece()
                 screen.blit(dark_overlay, (self.SCREEN_OFFSET_X, self.TABLE_Y))
                 self.pieces_promotion.draw(screen)
-            
-            pygame.draw.rect(screen, WHITE2, rect_pgn, width=1)
-            render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
+
+            if not (self.SETTINGS_ANIMATION_RUNNING or self.IN_SETTINGS):
+                pygame.draw.rect(screen, WHITE2, rect_pgn, width=1)
+                render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
+                screen.blit(image_fast_backward, rect_fast_backward)
+                screen.blit(image_backward, rect_backward)
+                screen.blit(image_forward, rect_forward)
+                screen.blit(image_fast_forward, rect_fast_forward)
 
             # these situations have to be checked every frame, whereas set_game_reason() gets called only after a move
             if self.clock_player.seconds_left <= 0:
@@ -591,9 +649,6 @@ class Game:
             elif self.draw: self.game_end_reason = "mutual agreement"
 
             if self.game_end_reason is not None:
-                self.promoting = False
-                self.clock_player.locked = True
-                self.clock_opponent.locked = True
                 break
 
             pygame.display.flip()
@@ -607,15 +662,12 @@ class Game:
             else:
                 self.winner = "White"
         
+        self.promoting = False
+        self.clock_player.locked = True
+        self.clock_opponent.locked = True
+        
         closed_dialog = False
-        for piece in self.pieces_player:
-            piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
-            piece.rect_square.center = piece.rect.center
-            piece.selected = False
-            piece.dragging = False
-            piece.holding = False
-
-        self.premoves = []
+        self.reset_premoves()
         # -------------------------------------------------------------------------------------------------------------------
         pygame.time.wait(100)
         while 1:
@@ -623,11 +675,16 @@ class Game:
             screen.fill(BLACKY)
             if self.SETTINGS_ANIMATION_RUNNING or self.IN_SETTINGS:
                 screen.blit(image_N, rect_N)
+            rect_resign = render_text("Rematch", WIDTH * 0.3, rect_N.bottom + f(100), int(f(25))) # now its rect_rematch
+            rect_draw = render_text("Home", WIDTH * 0.3, rect_N.bottom + f(200), int(f(25))) # rect_home
             screen.blit(image_bg, (self.SCREEN_OFFSET_X, self.SCREEN_OFFSET_Y))
             screen.blit(image_table, rect_table)
 
             if self.SETTINGS_ANIMATION_RUNNING:
+                self.reset_premoves()
+                
                 self.SCREEN_OFFSET_X += self.SETTINGS_ANIMATION_SPEED
+                self.TABLE_X += self.SETTINGS_ANIMATION_SPEED
                 rect_table.x += self.SETTINGS_ANIMATION_SPEED
                 rect_settings.x += self.SETTINGS_ANIMATION_SPEED
                 rect_image_player.x += self.SETTINGS_ANIMATION_SPEED
@@ -638,11 +695,20 @@ class Game:
                 rect_moving_square_curr.x += self.SETTINGS_ANIMATION_SPEED
                 rect_check_square.x += self.SETTINGS_ANIMATION_SPEED
                 rect_pgn.x += self.SETTINGS_ANIMATION_SPEED
+                rect_fast_backward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_backward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_forward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_fast_forward.x += self.SETTINGS_ANIMATION_SPEED
 
                 for piece in self.pieces_player:
                     piece.update_rect_position()
+                    piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                    piece.rect_square.center = piece.rect.center
+
                 for piece in self.pieces_opponent:
                     piece.update_rect_position()
+                    piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                    piece.rect_square.center = piece.rect.center
                 
                 for piece in self.pieces_promotion:
                     piece.update_rect_position()
@@ -656,7 +722,7 @@ class Game:
 
                 self.clock_player.update_rect_position()
                 self.clock_opponent.update_rect_position()
-            
+
             if self.SCREEN_OFFSET_X > WIDTH * 0.6:
                 self.SETTINGS_ANIMATION_RUNNING = False
                 self.IN_SETTINGS = True
@@ -675,33 +741,90 @@ class Game:
                         self.SETTINGS_ANIMATION_RUNNING = True
                         self.SETTINGS_ANIMATION_SPEED *= -1
                     
-                    if not closed_dialog and rect_gameover_button1.collidepoint(event.pos):
+                    if (not closed_dialog and rect_gameover_button1.collidepoint(event.pos)) or (closed_dialog and rect_resign.collidepoint(event.pos)):
                         Game.back_to_home = False
                         return
 
-                    if not closed_dialog and rect_gameover_button2.collidepoint(event.pos):
+                    if (not closed_dialog and rect_gameover_button2.collidepoint(event.pos)) or (closed_dialog and rect_draw.collidepoint(event.pos)):
                         Game.back_to_home = True
                         return
                     
                     clickable_area = rect_close_button.inflate(f(10), f(10))
                     if not closed_dialog and clickable_area.collidepoint(event.pos):
                         closed_dialog = True
+                
+                # handle parallel universe
+                    if rect_fast_backward.collidepoint(event.pos):
+                        self.move_index = 0
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
+                    
+                    if rect_backward.collidepoint(event.pos):
+                        if self.move_index >= 1:
+                            self.move_index -= 1
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
+                    
+                    if rect_forward.collidepoint(event.pos):
+                        if self.move_index <= len(self.fen) - 2:
+                            self.move_index += 1
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
+                    
+                    if rect_fast_forward.collidepoint(event.pos):
+                        self.move_index = len(self.fen) - 1
+                        self.reset_premoves()
+                        self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                        self.convert_fen(self.fen[self.move_index])
+                        self.algebraic_to_text()
+                
+                if event.type == pygame.KEYDOWN and not self.promoting:
+                    if event.key == pygame.K_LEFT:
+                        if self.move_index >= 1:
+                            self.move_index -= 1
+
+                    if event.key == pygame.K_RIGHT:
+                        if self.move_index <= len(self.fen) - 2:
+                            self.move_index += 1
+                    
+                    if event.key == pygame.K_DOWN:
+                        self.move_index = 0
+                    
+                    if event.key == pygame.K_UP:
+                        self.move_index = len(self.fen) - 1
+                
+                    self.reset_premoves()
+
+                    self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                    self.convert_fen(self.fen[self.move_index])
+                    self.algebraic_to_text()
             
             clock.tick(60)
 
             screen.blit(image_settings, rect_settings)
 
-            if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y:
+            for piece in self.captured_pieces_player:
+                screen.blit(piece.image, piece.rect)
+            for piece in self.captured_pieces_opponent:
+                screen.blit(piece.image, piece.rect)
+
+            if self.advantage > 0:
+                render_text(f"+{self.advantage}", self.advantage_x, rect_image_player.top + f(24), int(f(10)), True)
+            elif self.advantage < 0:
+                render_text(f"+{-self.advantage}", self.advantage_x, rect_image_opponent.top + f(24), int(f(10)), True)
+
+            if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y and not self.IN_PARALLEL_UNIVERSE:
                 screen.blit(moving_square_prev, rect_moving_square_prev)
                 screen.blit(moving_square_curr, rect_moving_square_curr)
 
             self.pieces_player.draw(screen)
             self.pieces_opponent.draw(screen)
-
-            for piece in self.captured_pieces_player:
-                screen.blit(piece.image, piece.rect)
-            for piece in self.captured_pieces_opponent:
-                screen.blit(piece.image, piece.rect)
 
             # rendering off table stuff
             screen.blit(image_unknown_user, rect_image_player)
@@ -714,11 +837,6 @@ class Game:
 
             screen.blit(image_flag_player, rect_flag_player)
             screen.blit(image_flag_opponent, rect_flag_opponent)
-
-            if self.advantage > 0:
-                render_text(f"+{self.advantage}", self.advantage_x, rect_image_player.top + f(24), int(f(10)), True)
-            elif self.advantage < 0:
-                render_text(f"+{-self.advantage}", self.advantage_x, rect_image_opponent.top + f(24), int(f(10)), True)
 
             self.clock_player.draw()
             self.clock_opponent.draw()
@@ -744,8 +862,13 @@ class Game:
 
                 screen.blit(image_close_button, rect_close_button)
 
-            pygame.draw.rect(screen, WHITE2, rect_pgn, width=max(1, f(1)))
-            render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
+            if not (self.SETTINGS_ANIMATION_RUNNING or self.IN_SETTINGS):
+                pygame.draw.rect(screen, WHITE2, rect_pgn, width=1)
+                render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
+                screen.blit(image_fast_backward, rect_fast_backward)
+                screen.blit(image_backward, rect_backward)
+                screen.blit(image_forward, rect_forward)
+                screen.blit(image_fast_forward, rect_fast_forward)
 
             pygame.display.flip()
 
@@ -809,6 +932,16 @@ class Game:
             
             self.pieces_promotion = pygame.sprite.Group()
             self.promoting = False
+    
+    def reset_premoves(self):
+        for piece in self.pieces_player:
+            piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+            piece.rect_square.center = piece.rect.center
+            piece.selected = False
+            piece.dragging = False
+            piece.holding = False
+
+        self.premoves = []
     
     def is_move_ready(self):
         if self.thread is None:
@@ -995,6 +1128,18 @@ class Game:
             self.clock_opponent.locked = not self.clock_opponent.locked
         # mark algebraic
         self.algebraic.append(self.curr_algebraic)
+        self.algebraic_to_text()
+
+    def algebraic_to_text(self):
+        self.algebraic_text = ""
+        move_number = 1
+        for i in range(self.move_index + 1):
+            if i % 2 == 1:
+                self.algebraic_text += f"{move_number}. "
+                self.algebraic_text += f"{self.algebraic[i]} "
+                move_number += 1
+            else:
+                self.algebraic_text += f"{self.algebraic[i]}  "
 
     def get_best_move(self):
         with self.lock:
@@ -1423,14 +1568,19 @@ class Slider():
                 self.rect_cursor.x = max(self.rect_cursor.x, self.left_bound)
     
     def calc_based_on_cursor(self, home, num):
-        # if num is 1, calculate minutes, else increment
-        total = len(availableMinutes) - 1 if num == 1 else len(availableIncrements) - 1
+        # if num is 1, calculate minutes, if 2, increment and 3 strength
+        if num == 1: total = len(available_minutes) - 1
+        elif num == 2: total = len(available_increments) - 1
+        else: total = len(available_strengths) - 1
+
         unitLength = (self.right_bound - self.left_bound) // total
         i = (self.rect_cursor.x - self.left_bound) // unitLength
         if num == 1:
-            home.minutes = availableMinutes[i]
+            home.minutes = available_minutes[i]
+        elif num == 2:
+            home.increment = available_increments[i]
         else:
-            home.increment = availableIncrements[i]
+            home.strength = available_strengths[i]
 
 class Piece(pygame.sprite.Sprite):
     def __init__(self, game, name, image, row, column, names):
@@ -2381,7 +2531,7 @@ class Clock():
     
     def update_rect_position(self):
         if self.player:
-            self.rect.y += self.game.SETTINGS_ANIMATION_SPEED * 0.7
+            self.rect.y += self.game.SETTINGS_ANIMATION_SPEED / 4
         else:
             self.rect.y -= self.game.SETTINGS_ANIMATION_SPEED / 4
 
