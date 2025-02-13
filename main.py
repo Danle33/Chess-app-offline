@@ -57,14 +57,18 @@ premove_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
 premove_square.fill(PURPLE_TRANSPARENT)
 
 # renders string s with (default center) position at (x, y) and given font size
-def render_text(s, x, y, font_size, top_left=False, color=WHITE):
+def render_text(s, x, y, font_size, top_left=False, right=False, color=WHITE):
     font = pygame.font.Font("Assets/shared/fonts\\jetBrainsMono/ttf/JetBrainsMono-Regular.ttf", font_size)
     text_surface = font.render(s, True, color)
     rect_text = text_surface.get_rect()
     if top_left:
         rect_text.topleft = (x, y)
+    elif right:
+        rect_text.right = x
+        rect_text.centery = y
     else:
         rect_text.center = (x, y)
+
     screen.blit(text_surface, rect_text)
     return rect_text
 
@@ -145,7 +149,7 @@ image_close_button = pygame.image.load("Assets/shared/close.png")
 image_close_button = pygame.transform.smoothscale(image_close_button, (f(10), f(10)))
 rect_close_button = image_close_button.get_rect()
 
-rect_pgn = pygame.Rect(f(10), rect_image_player.bottom + f(50), WIDTH - 2 * f(10), f(30))
+rect_pgn = pygame.Rect(-1, rect_image_player.bottom + f(50), WIDTH + 2, f(30))
 
 piece_to_value = dict()
 for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3, 3, 5, 9, 1, 3, 3, 5, 9]):
@@ -158,7 +162,7 @@ for file, column in file_to_column.items():
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
-
+fen_start = "8/5P2/8/8/5k2/8/3K4/8 w - - 0 1"
 '''
 try_positions = []
 try_positions.append("rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3") # bishop pinning the knight
@@ -274,10 +278,13 @@ class Game:
 
         # fen code, list of strings where every string describes one position
         self.fen = []
+        self.move_index = len(self.fen) - 1
 
         # list of moves represented in extended algebraic notation
         self.algebraic = []
         self.curr_algebraic = ""
+        self.algebraic_index = 0
+        self.algebraic_text = ""
 
         # mapping position to how many times it occured, used for threefold repetition detection
         self.fen_count = dict()
@@ -300,6 +307,8 @@ class Game:
         self.SETTINGS_ANIMATION_RUNNING = False
         self.IN_SETTINGS = False
 
+        self.IN_PARALLEL_UNIVERSE = False
+
         rect_table.topleft = (self.TABLE_X, self.TABLE_Y)
 
         # assuming player is white
@@ -318,7 +327,7 @@ class Game:
         rect_flag_player.topleft = (self.SCREEN_OFFSET_X + f(200), rect_image_player.top)
         rect_flag_opponent.topleft = (self.SCREEN_OFFSET_X + f(192), rect_image_opponent.top)
         rect_settings.topleft = (self.SCREEN_OFFSET_X + f(30), self.SCREEN_OFFSET_Y + f(30))
-        rect_pgn.topleft = (f(10), rect_image_player.bottom + f(50))
+        rect_pgn.topleft = (-1, rect_image_player.bottom + f(50))
         rect_moving_square_prev.center = (-1, -1)
         rect_check_square.center = (-1, -1)
         rect_close_button.topright = (rect_gameover_big.right - f(10), rect_gameover_big.top + f(10))
@@ -438,6 +447,34 @@ class Game:
                     
                     if self.IN_SETTINGS and rect_draw.collidepoint(event.pos):
                         self.draw = True
+                
+                if event.type == pygame.KEYDOWN and not self.promoting:
+                    if event.key == pygame.K_LEFT:
+                        if self.move_index >= 1:
+                            self.move_index -= 1
+                            for piece in self.pieces_player:
+                                piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                                piece.rect_square.center = piece.rect.center
+                                piece.selected = False
+                                piece.dragging = False
+                                piece.holding = False
+
+                            self.premoves = []
+                            self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                            self.convert_fen(self.fen[self.move_index])
+                    if event.key == pygame.K_RIGHT:
+                        if self.move_index <= len(self.fen) - 2:
+                            self.move_index += 1
+                            for piece in self.pieces_player:
+                                piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
+                                piece.rect_square.center = piece.rect.center
+                                piece.selected = False
+                                piece.dragging = False
+                                piece.holding = False
+
+                            self.premoves = []
+                            self.IN_PARALLEL_UNIVERSE = not (self.move_index == len(self.fen) - 1)
+                            self.convert_fen(self.fen[self.move_index])
 
                 for piece in self.pieces_player:
                     piece.handle_event(event)
@@ -451,6 +488,10 @@ class Game:
                         piece.handle_event_promotion(event)
             
             if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
+                if self.IN_PARALLEL_UNIVERSE:
+                    self.convert_fen(self.fen[-1])
+                self.move_index = len(self.fen) - 1
+                self.IN_PARALLEL_UNIVERSE = False
                 self.play_move_stockfish()
                 self.post_move_processing()
                 
@@ -480,11 +521,11 @@ class Game:
 
             screen.blit(image_settings, rect_settings)
 
-            if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y:
+            if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y and not self.IN_PARALLEL_UNIVERSE:
                 screen.blit(moving_square_prev, rect_moving_square_prev)
                 screen.blit(moving_square_curr, rect_moving_square_curr)
             
-            if rect_check_square.center[0] >= self.SCREEN_OFFSET_X and rect_check_square.center[1] >= self.SCREEN_OFFSET_Y:
+            if rect_check_square.center[0] >= self.SCREEN_OFFSET_X and rect_check_square.center[1] >= self.SCREEN_OFFSET_Y and not self.IN_PARALLEL_UNIVERSE:
                 screen.blit(check_square, rect_check_square)
 
             self.pieces_player.draw(screen)
@@ -521,7 +562,7 @@ class Game:
             # render premoving squares
             for (piece, center) in self.premoves:
                 rect_premove_square = premove_square.get_rect()
-                rect_premove_square.center = center
+                rect_premove_square.center = (center[0] + self.SCREEN_OFFSET_X, center[1])
                 screen.blit(premove_square, rect_premove_square)
 
             if self.promoting:
@@ -529,7 +570,8 @@ class Game:
                 screen.blit(dark_overlay, (self.SCREEN_OFFSET_X, self.TABLE_Y))
                 self.pieces_promotion.draw(screen)
             
-            pygame.draw.rect(screen, WHITE2, rect_pgn, width=max(1, f(1)), border_radius=int(f(3)))
+            pygame.draw.rect(screen, WHITE2, rect_pgn, width=1)
+            render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
 
             # these situations have to be checked every frame, whereas set_game_reason() gets called only after a move
             if self.clock_player.seconds_left <= 0:
@@ -702,7 +744,8 @@ class Game:
 
                 screen.blit(image_close_button, rect_close_button)
 
-            pygame.draw.rect(screen, WHITE2, rect_pgn, width=max(1, f(1)), border_radius=int(f(3)))
+            pygame.draw.rect(screen, WHITE2, rect_pgn, width=max(1, f(1)))
+            render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
 
             pygame.display.flip()
 
@@ -730,11 +773,36 @@ class Game:
             pawn.kill()
 
             new_piece = Piece(piece.game, piece.name, piece.image, piece.row, piece.column, piece.names)
+            self.curr_algebraic += f"={new_piece.name.upper()}"
             self.matrix_to_piece[((row, column))] = new_piece
             if piece.row == 0:
                 self.pieces_player.add(new_piece)
             elif piece.row == 7:
                 self.pieces_opponent.add(new_piece)
+
+            # promoting a piece is equivalent to losing a pawn but capturing opponents piece (chosen one), materialwise
+            self.process_captured_piece(new_piece.name)
+
+            # lil simulation
+            if self.player_to_move == "p":
+                self.player_to_move = "o"
+            else:
+                self.player_to_move = "p"
+
+            self.process_captured_piece("p")
+
+            if self.player_to_move == "p":
+                self.player_to_move = "o"
+            else:
+                self.player_to_move = "p"
+            
+            # update advantage
+            if new_piece.names == self.names_player:
+                self.advantage += piece_to_value[new_piece.name]
+                self.advantage -= piece_to_value["p"]
+            else:
+                self.advantage -= piece_to_value[new_piece.name]
+                self.advantage += piece_to_value["p"]
 
             for piecee in self.pieces_promotion:
                 piecee.kill()
@@ -906,7 +974,11 @@ class Game:
 
         # update fen
         self.scan_fen()
+        self.move_index = len(self.fen) - 1
         self.stockfish.set_fen_position(self.fen[-1])
+
+        #self.convert_fen(self.fen[-1])
+
         self.update_available_squares()
         self.mark_check()
         self.set_game_end_reason()
@@ -922,12 +994,7 @@ class Game:
             self.clock_player.locked = not self.clock_player.locked
             self.clock_opponent.locked = not self.clock_opponent.locked
         # mark algebraic
-        if len(self.fen) % 2 == 0:
-            self.algebraic.append([])
-            self.algebraic[-1].append(self.curr_algebraic)
-        else:
-            self.algebraic[-1].append(self.curr_algebraic)
-        print(self.algebraic[-1])
+        self.algebraic.append(self.curr_algebraic)
 
     def get_best_move(self):
         with self.lock:
@@ -1245,16 +1312,17 @@ class Game:
         data = rest.split(" ")
         (mover, castling_rights, ep_square, self.halfmoves, self.fullmoves) = (data[0], data[1], data[2], int(data[3]), int(data[4]))
 
-        if self.player_color == "w":
-            if mover == "w":
-                self.player_to_move = "p"
+        if not self.IN_PARALLEL_UNIVERSE:
+            if self.player_color == "w":
+                if mover == "w":
+                    self.player_to_move = "p"
+                else:
+                    self.player_to_move = "o"
             else:
-                self.player_to_move = "o"
-        else:
-            if mover == "w":
-                self.player_to_move = "o"
-            else:
-                self.player_to_move = "p"
+                if mover == "w":
+                    self.player_to_move = "o"
+                else:
+                    self.player_to_move = "p"
         
         if castling_rights == "-":
             self.K = self.Q = self.k = self.q = False
@@ -1265,7 +1333,8 @@ class Game:
                 if right == "Q": self.Q = True
                 if right == "q": self.q = True
 
-        self.update_available_squares()
+        if not self.IN_PARALLEL_UNIVERSE:
+            self.update_available_squares()
 
     def process_captured_piece(self, piece_name):
         removed = False
@@ -1893,6 +1962,16 @@ class Piece(pygame.sprite.Sprite):
         (x, y) = self.calc_position_screen(self.row, self.column)
         rect_moving_square_curr.center = (x, y)
 
+        # check if current piece is waiting in premoves
+        in_premoves = False
+        for (piece, square) in self.game.premoves:
+            if self is piece:
+                in_premoves = True
+                break
+        if not in_premoves:
+            self.rect.center = self.calc_position_screen(self.row, self.column)
+            self.rect_square.center = self.rect.center
+
         # mark en passant square
         if self.name in ["P", "p"]:
             self.game.halfmoves = 0
@@ -2010,16 +2089,6 @@ class Piece(pygame.sprite.Sprite):
                 self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)] = None
                 rook.update_available_squares()
         
-        # check if current piece is waiting in premoves
-        in_premoves = False
-        for (piece, square) in self.game.premoves:
-            if self is piece:
-                in_premoves = True
-                break
-        if not in_premoves:
-            self.rect.center = self.calc_position_screen(self.row, self.column)
-            self.rect_square.center = self.rect.center
-        
         # if its not a pawn move nor a capture, increment halfmoves
         if not self.name in ["P", "p"] and not self.game.TABLE_MATRIX[self.row][self.column] != '.':
             self.game.halfmoves += 1
@@ -2063,7 +2132,7 @@ class Piece(pygame.sprite.Sprite):
         self.game.premoves.append((self, self.rect.center))
 
     def handle_event(self, event):
-        if self.game.IN_SETTINGS:
+        if self.game.IN_SETTINGS or self.game.IN_PARALLEL_UNIVERSE:
             return
         
         (mouse_x, mouse_y) = pygame.mouse.get_pos()
