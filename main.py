@@ -34,7 +34,7 @@ GRAY = (128, 128, 128)
 
 available_minutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
 available_increments = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 60]
-available_strengths = list(range(1, 21))
+available_strengths = range(1, 21)
 
 SQUARE_SIZE = WIDTH / 8
 
@@ -179,8 +179,8 @@ for file, column in file_to_column.items():
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
-#fen_start = "8/5P2/8/8/5k2/8/3K4/8 w - - 0 1"
-'''
+fen_start = "8/8/5P2/8/5k2/8/3K4/8 w - - 0 1"
+
 try_positions = []
 try_positions.append("rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3") # bishop pinning the knight
 try_positions.append("r1bqkbnr/ppppp1pp/2n5/4Pp2/8/8/PPPP1PPP/RNBQKBNR w KQkq f6 0 3") # en passant possible
@@ -204,7 +204,6 @@ try_positions.append("8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1") # two queens vs king p
 try_positions.append("2k5/1n6/8/8/8/8/6p1/4K2R w K - 0 1") # castling through pawn check
 try_positions.append("R2Q4/5pbk/2p3p1/3b4/4p1B1/7P/1q1P1P2/4K3 w - - 0 1") # queen giving check being defended by a pinned bishop
 try_positions.append("r2k4/1P5R/8/8/8/8/8/3K4 w - - 0 1") # promotion while capturing into a checkmate (hell yeah)
-'''
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -350,7 +349,7 @@ class Game:
         rect_image_player.topleft = (self.SCREEN_OFFSET_X + f(10), self.TABLE_Y + 8 * SQUARE_SIZE + f(15))
         rect_image_opponent.bottomleft = (self.SCREEN_OFFSET_X  + f(10), self.TABLE_Y - f(15))
         rect_flag_player.topleft = (self.SCREEN_OFFSET_X + f(200), rect_image_player.top)
-        rect_flag_opponent.topleft = (self.SCREEN_OFFSET_X + f(192), rect_image_opponent.top)
+        rect_flag_opponent.topleft = (self.SCREEN_OFFSET_X + f(200), rect_image_opponent.top)
         rect_settings.topleft = (self.SCREEN_OFFSET_X + f(30), self.SCREEN_OFFSET_Y + f(30))
         rect_pgn.topleft = (-1, rect_image_player.bottom + f(30))
         rect_moving_square_prev.center = (-1, -1)
@@ -387,6 +386,7 @@ class Game:
 
         self.stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
         self.stockfish.set_skill_level(self.strength)
+        self.stockfish_elo = 135 * self.strength + 800 # estimate
         self.stockfish.set_fen_position(fen_start)
         self.thread = None
         if self.stockfish_active:
@@ -396,7 +396,6 @@ class Game:
 
     
     def run(self):
-        # game loop
         while 1:
             # rendering "behind" the gameplay
             screen.fill(BLACKY)
@@ -556,14 +555,16 @@ class Game:
                 self.post_move_processing()
                 
                 if len(self.premoves) > 0:
-                    (piece, center) = self.premoves.pop(0)
+                    (piece, center) = self.premoves[0]
                     square = piece.calc_position_matrix(center)
                     if piece.available_move(square):
+                        print("kusdhf")
                         piece.selected = False
                         piece.dragging = False
                         piece.holding = False
                         piece.unselecting_downclick = False
-                        piece.make_move(square)                        
+                        piece.make_move(square)
+                        self.premoves.pop(0)                        
                         self.post_move_processing()
                     else:
                         self.reset_premoves()
@@ -596,7 +597,7 @@ class Game:
             render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
             render_text("(3500)", self.SCREEN_OFFSET_X + f(138), rect_image_player.top + f(1), int(f(14)), True, GRAY)
             render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
-            render_text("(987)", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
+            render_text(f"({self.stockfish_elo})", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
 
             screen.blit(image_flag_player, rect_flag_player)
             screen.blit(image_flag_opponent, rect_flag_opponent)
@@ -741,11 +742,11 @@ class Game:
                         self.SETTINGS_ANIMATION_RUNNING = True
                         self.SETTINGS_ANIMATION_SPEED *= -1
                     
-                    if (not closed_dialog and rect_gameover_button1.collidepoint(event.pos)) or (closed_dialog and rect_resign.collidepoint(event.pos)):
+                    if (not closed_dialog and rect_gameover_button1.collidepoint(event.pos)) or rect_resign.collidepoint(event.pos):
                         Game.back_to_home = False
                         return
 
-                    if (not closed_dialog and rect_gameover_button2.collidepoint(event.pos)) or (closed_dialog and rect_draw.collidepoint(event.pos)):
+                    if (not closed_dialog and rect_gameover_button2.collidepoint(event.pos)) or rect_draw.collidepoint(event.pos):
                         Game.back_to_home = True
                         return
                     
@@ -833,7 +834,7 @@ class Game:
             render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
             render_text("(3500)", self.SCREEN_OFFSET_X + f(138), rect_image_player.top + f(1), int(f(14)), True, GRAY)
             render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
-            render_text("(987)", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
+            render_text(f"({self.stockfish_elo})", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
 
             screen.blit(image_flag_player, rect_flag_player)
             screen.blit(image_flag_opponent, rect_flag_opponent)
@@ -2254,7 +2255,7 @@ class Piece(pygame.sprite.Sprite):
             row = self.row
             if self.row == 0:
                 self.game.promotion_square = (self.row, self.column)
-                self.game.promoting = True
+                self.game.promoting = not in_premoves
                 names_list = ["Q", "R", "N", "B"]
                 if self.game.player_color == "b":
                     names_list = [name.lower() for name in names_list]
@@ -2265,7 +2266,7 @@ class Piece(pygame.sprite.Sprite):
                 (self.row, self.column) = (prev_row, prev_column)
             if self.row == 7:
                 self.game.promotion_square = (self.row, self.column)
-                self.game.promoting = True
+                self.game.promoting = not in_premoves
                 names_list = ["Q", "R", "N", "B"]
                 if self.game.player_color == "w":
                     names_list = [name.lower() for name in names_list]
@@ -2442,7 +2443,7 @@ class Piece(pygame.sprite.Sprite):
             self.rect.center = (curr_x, curr_y)
             self.rect_square.center = self.rect.center
 
-    def handle_event_promotion(self, event):
+    def handle_event_promotion(self, event, premoved=False):
         if self.game.IN_SETTINGS:
             return
 
@@ -2450,23 +2451,26 @@ class Piece(pygame.sprite.Sprite):
         mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
         left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
 
-        if left_click and mouse_on_piece:
-
+        if premoved:
             (row, column) = self.game.promotion_square
-            self.row = row
-            self.column = column
-            self.game.TABLE_MATRIX[row][column] = self.name
 
             pawn = self.game.matrix_to_piece[((row, column))]
-            pawn.kill()
+            #pawn.kill()
 
-            self.game.curr_algebraic += f"={self.name.upper()}"
-            new_piece = Piece(self.game, self.name, self.image, self.row, self.column, self.names)
-            self.game.matrix_to_piece[((row, column))] = new_piece
-            if self.row == 0:
-                self.game.pieces_player.add(new_piece)
-            elif self.row == 7:
-                self.game.pieces_opponent.add(new_piece)
+            for piece in self.game.pieces_promotion:
+                if piece.name in ["Q", "q"]:
+                    queen = piece
+                    break
+
+            self.game.curr_algebraic += f"={queen.name.upper()}"
+
+            pawn.name = queen.name
+            pawn.image = queen.image
+            pawn.row = row
+            pawn.column = column
+            pawn.selected = False
+
+            self.game.TABLE_MATRIX[row][column] = pawn.name
 
             # promoting a piece is equivalent to losing a pawn but capturing opponents piece (chosen one), materialwise
             self.game.process_captured_piece(self.name)
@@ -2491,7 +2495,55 @@ class Piece(pygame.sprite.Sprite):
             else:
                 self.game.advantage -= piece_to_value[self.name]
                 self.game.advantage += piece_to_value["p"]
+
+            for piece in self.game.pieces_promotion:
+                piece.kill()
             
+            self.game.pieces_promotion = pygame.sprite.Group()
+            self.game.promoting = False
+
+            self.game.post_move_processing()
+
+        if left_click and mouse_on_piece:
+
+            (row, column) = self.game.promotion_square
+
+            pawn = self.game.matrix_to_piece[((row, column))]
+            #pawn.kill()
+
+            self.game.curr_algebraic += f"={self.name.upper()}"
+
+            pawn.name = self.name
+            pawn.image = self.image
+            pawn.row = row
+            pawn.column = column
+            pawn.selected = False
+
+            self.game.TABLE_MATRIX[row][column] = pawn.name
+
+            # promoting a piece is equivalent to losing a pawn but capturing opponents piece (chosen one), materialwise
+            self.game.process_captured_piece(self.name)
+
+            # lil simulation
+            if self.game.player_to_move == "p":
+                self.game.player_to_move = "o"
+            else:
+                self.game.player_to_move = "p"
+
+            self.game.process_captured_piece("p")
+
+            if self.game.player_to_move == "p":
+                self.game.player_to_move = "o"
+            else:
+                self.game.player_to_move = "p"
+            
+            # update advantage
+            if self.names == self.game.names_player:
+                self.game.advantage += piece_to_value[self.name]
+                self.game.advantage -= piece_to_value["p"]
+            else:
+                self.game.advantage -= piece_to_value[self.name]
+                self.game.advantage += piece_to_value["p"]
 
             for piece in self.game.pieces_promotion:
                 piece.kill()
@@ -2537,6 +2589,7 @@ class Clock():
 
 # manager loop, controls current state: home or gameplay
 home = Home()
+i = 0
 while 1:
     if Game.back_to_home:
         home.run()
