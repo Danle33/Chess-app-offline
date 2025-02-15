@@ -178,8 +178,6 @@ for file, column in file_to_column.items():
     column_to_file[column] = file
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-#fen_start = "8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1"
-fen_start = "8/8/5P2/8/5k2/8/3K4/8 w - - 0 1"
 
 try_positions = []
 try_positions.append("rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3") # bishop pinning the knight
@@ -558,12 +556,14 @@ class Game:
                     (piece, center) = self.premoves[0]
                     square = piece.calc_position_matrix(center)
                     if piece.available_move(square):
-                        print("kusdhf")
                         piece.selected = False
                         piece.dragging = False
                         piece.holding = False
                         piece.unselecting_downclick = False
                         piece.make_move(square)
+                        if piece.name in ["P", "p"] and (piece.row == 1 or piece.row == 6):
+                            print(self.promotion_square)
+                            piece.handle_event_promotion(None, premoved=True)
                         self.premoves.pop(0)                        
                         self.post_move_processing()
                     else:
@@ -2278,9 +2278,33 @@ class Piece(pygame.sprite.Sprite):
 
     def make_premove(self):
         (row, column) = self.calc_position_matrix(self.rect.center)
+        if self.game.TABLE_MATRIX[row][column] != '.':
+            # render piece in the back off screen
+            self.game.matrix_to_piece[(row, column)].rect.center = (-SQUARE_SIZE, -SQUARE_SIZE)
+            self.game.matrix_to_piece[(row, column)].rect_square.center = (-SQUARE_SIZE, -SQUARE_SIZE)
         self.rect.center = self.calc_position_screen(row, column)
-        self.rect_square.center = self.rect.center
+        self.rect_square.center = self.rect.center            
         self.game.premoves.append((self, self.rect.center))
+
+        # castling, gotta move the rook too
+        if self.name in ["K", "k"] and not self.moved:
+            # left castling
+            if column + 2 == self.column:
+                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 0), (self.row, column + 1))
+
+                rook = self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)]
+                # updating rooks current square
+                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
+                rook.rect_square.center = rook.rect.center
+            
+            # right castling
+            if self.column + 2 == column:
+                ((rook_prev_row, rook_prev_column), (rook_curr_row, rook_curr_column)) = ((self.row, 7), (self.row, column - 1))
+
+                rook = self.game.matrix_to_piece[(rook_prev_row, rook_prev_column)]
+                # updating rooks current square
+                rook.rect.center = rook.calc_position_screen(rook_curr_row, rook_curr_column)
+                rook.rect_square.center = rook.rect.center
 
     def handle_event(self, event):
         if self.game.IN_SETTINGS or self.game.IN_PARALLEL_UNIVERSE:
@@ -2447,13 +2471,9 @@ class Piece(pygame.sprite.Sprite):
         if self.game.IN_SETTINGS:
             return
 
-        (mouse_x, mouse_y) = pygame.mouse.get_pos()
-        mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
-        left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
-
         if premoved:
             (row, column) = self.game.promotion_square
-
+            print(self.game.TABLE_MATRIX[row][column])
             pawn = self.game.matrix_to_piece[((row, column))]
             #pawn.kill()
 
@@ -2471,10 +2491,8 @@ class Piece(pygame.sprite.Sprite):
             pawn.selected = False
 
             self.game.TABLE_MATRIX[row][column] = pawn.name
-
             # promoting a piece is equivalent to losing a pawn but capturing opponents piece (chosen one), materialwise
-            self.game.process_captured_piece(self.name)
-
+            self.game.process_captured_piece(queen.name)
             # lil simulation
             if self.game.player_to_move == "p":
                 self.game.player_to_move = "o"
@@ -2501,8 +2519,11 @@ class Piece(pygame.sprite.Sprite):
             
             self.game.pieces_promotion = pygame.sprite.Group()
             self.game.promoting = False
-
-            self.game.post_move_processing()
+            return
+        
+        (mouse_x, mouse_y) = pygame.mouse.get_pos()
+        mouse_on_piece = self.rect_square.collidepoint((mouse_x, mouse_y))
+        left_click = event.type == pygame.MOUSEBUTTONDOWN and event.button == 1
 
         if left_click and mouse_on_piece:
 
