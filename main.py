@@ -20,45 +20,21 @@ clock = pygame.time.Clock()
 
 # ASSETS/GLOBALS
 
-WHITE = (255, 255, 255)
-WHITE2 = (170, 170, 170)
-BLACKY = (30, 30, 30)
-BLACKY1 = (20, 20, 20)
-DARK_GREEN_TRANSPARENT = (0, 50, 0, 50)
-DARK_GREEN_TRANSPARENT1 = (0, 50, 0, 25)
-YELLOW_TRANSPARENT = (255, 255, 0, 20)
-YELLOW_TRANSPARENT1 = (255, 255, 0, 10)
-RED_TRANSPARENT = (255, 0, 0, 50)
-PURPLE_TRANSPARENT = (100, 0, 150, 25)
-GRAY = (128, 128, 128)
-
 available_minutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
 available_increments = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 60]
 available_strengths = range(1, 21)
 
 SQUARE_SIZE = WIDTH / 8
 
-dark_overlay = pygame.Surface((WIDTH, WIDTH))  # Create a surface
-dark_overlay.set_alpha(200)  # Set alpha (0 is transparent, 255 is opaque)
-dark_overlay.fill((0, 0, 0))  # Fill with black
-
-moving_square_prev = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-moving_square_prev.fill(YELLOW_TRANSPARENT1)
-rect_moving_square_prev = moving_square_prev.get_rect()
-
-moving_square_curr = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-moving_square_curr.fill(YELLOW_TRANSPARENT)
-rect_moving_square_curr = moving_square_prev.get_rect()
-
-check_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-check_square.fill(RED_TRANSPARENT)
-rect_check_square = check_square.get_rect()
-
-premove_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-premove_square.fill(PURPLE_TRANSPARENT)
+# calculates new dimensions based on initial ones which are 450*975
+# enables rescalling while keeping aspect ratio
+def f(x):
+    return x * WIDTH / 450
 
 # renders string s with (default center) position at (x, y) and given font size
-def render_text(s, x, y, font_size, top_left=False, right=False, color=WHITE):
+def render_text(s, x, y, font_size, top_left=False, right=False, color=None):
+    if color is None:
+        color = Assets.WHITE
     font = pygame.font.Font("Assets/shared/fonts\\jetBrainsMono/ttf/JetBrainsMono-Regular.ttf", font_size)
     text_surface = font.render(s, True, color)
     rect_text = text_surface.get_rect()
@@ -73,100 +49,222 @@ def render_text(s, x, y, font_size, top_left=False, right=False, color=WHITE):
     screen.blit(text_surface, rect_text)
     return rect_text
 
-# calculates new dimensions based on initial ones which are 450*975
-# enables rescalling while keeping aspect ratio
-def f(x):
-    return x * WIDTH / 450
+class Assets:
 
-# background image
-image_bg = pygame.image.load("Assets/dark/backgrounds/boje1.png")
-image_bg = pygame.transform.smoothscale(image_bg, (WIDTH, HEIGHT))
+    theme = "dark"
 
-# table
-image_table = pygame.image.load("Assets/dark/boards/tiles.png")
-image_table = pygame.transform.smoothscale(image_table, (WIDTH, WIDTH))
-rect_table = image_table.get_rect()
+    WHITE = (255, 255, 255)
+    WHITE2 = (170, 170, 170)
+    BLACK = (0, 0, 0)
+    BLACKY = (30, 30, 30)
+    BLACKY1 = (20, 20, 20)
+    DARK_GREEN_TRANSPARENT = (0, 50, 0, 50)
+    DARK_GREEN_TRANSPARENT1 = (0, 50, 0, 25)
+    YELLOW_TRANSPARENT = (255, 255, 0, 20)
+    YELLOW_TRANSPARENT1 = (255, 255, 0, 10)
+    RED_TRANSPARENT = (255, 0, 0, 50)
+    PURPLE_TRANSPARENT = (100, 0, 150, 25)
+    GRAY = (128, 128, 128)
 
-# kings images home screen
-image_K = pygame.image.load("Assets/dark/pieces white/K.png")
-image_K = pygame.transform.smoothscale(image_K, (f(100), f(100)))
-rect_K = image_K.get_rect()
+    dark_overlay = pygame.Surface((WIDTH, WIDTH))  # Create a surface
+    dark_overlay.set_alpha(220)  # Set alpha (0 is transparent, 255 is opaque)
+    dark_overlay.fill(BLACK)  # Fill with black
+
+    moving_square_prev = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+    moving_square_prev.fill(YELLOW_TRANSPARENT1)
+
+    moving_square_curr = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+    moving_square_curr.fill(YELLOW_TRANSPARENT)
+
+    check_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+    check_square.fill(RED_TRANSPARENT)
+
+    premove_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
+    premove_square.fill(PURPLE_TRANSPARENT)
+
+    # background image
+    image_bg = pygame.image.load("Assets/dark/backgrounds/boje1.png")
+    image_bg = pygame.transform.smoothscale(image_bg, (WIDTH, HEIGHT))
+
+    # table
+    image_table = pygame.image.load("Assets/dark/boards/board background.png")
+    image_table = pygame.transform.smoothscale(image_table, (WIDTH, WIDTH))
+
+    # kings images home screen
+    image_K = pygame.image.load("Assets/dark/pieces white/K.png")
+    image_K = pygame.transform.smoothscale(image_K, (f(100), f(100)))
+
+    image_k = pygame.image.load("Assets/dark/pieces black/k.png")
+    image_k = pygame.transform.smoothscale(image_k, (f(100), f(100)))
+
+    image_N = pygame.image.load("Assets/dark/pieces white/N.png")
+    image_N = pygame.transform.smoothscale(image_N, (f(100), f(100)))
+
+    image_unknown_user = pygame.image.load("Assets/dark/users/unknown user.png")
+    image_unknown_user = pygame.transform.smoothscale(image_unknown_user, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7 * 93 / 97))
+
+    image_flag_player = pygame.image.load("Assets/shared/flags/64/unknown.png")
+    image_flag_player = pygame.transform.smoothscale(image_flag_player, (f(20), f(20)))
+
+    image_flag_opponent = pygame.image.load("Assets/shared/flags/64/unknown.png")
+    image_flag_opponent = pygame.transform.smoothscale(image_flag_opponent, (f(20), f(20)))
+
+    image_settings = pygame.image.load("Assets/dark/options.png")
+    image_settings = pygame.transform.smoothscale(image_settings, (SQUARE_SIZE * 0.6, SQUARE_SIZE * 0.6 * 55 / 75))
+
+    image_panel = pygame.image.load("Assets/shared/home/Rectangle 28.png")
+    image_cursor = pygame.image.load("Assets/shared/home/Rectangle 32.png")
+
+    image_gameover_big = pygame.image.load("Assets/shared/Rectangle 34.png")
+    image_gameover_big = pygame.transform.smoothscale(image_gameover_big, (WIDTH * 0.7, WIDTH * 0.7 * 650 / 1200))
+
+    image_gameover_small = pygame.image.load("Assets/shared/Rectangle 35.jpg")
+    image_gameover_small = pygame.transform.smoothscale(image_gameover_small, (WIDTH * 0.7, WIDTH * 0.7 * 300 / 1200))
+
+    image_trophy = pygame.image.load("Assets/shared/image 2.png")
+    image_trophy = pygame.transform.smoothscale(image_trophy, (image_gameover_big.get_height() - image_gameover_small.get_height() - f(40), 
+                                                               (image_gameover_big.get_height() - image_gameover_small.get_height() - f(40)) * 211 / 180))
+
+    image_gameover_button = pygame.image.load("Assets/shared/Rectangle 36.png")
+    image_gameover_button = pygame.transform.smoothscale(image_gameover_button, (image_gameover_big.get_width() / 2 - f(20), 
+                                                        (image_gameover_big.get_width() / 2 - f(20)) * 150 / 550))
+
+    image_close_button = pygame.image.load("Assets/shared/close.png")
+    image_close_button = pygame.transform.smoothscale(image_close_button, (f(10), f(10)))
+
+    image_fast_backward = pygame.image.load("Assets/dark/pgn controlls/first.png")
+    image_fast_backward = pygame.transform.smoothscale(image_fast_backward, (f(35), f(35) * 80 / 88))
+
+    image_backward = pygame.image.load("Assets/dark/pgn controlls/previous.png")
+    image_backward = pygame.transform.smoothscale(image_backward, (f(35), f(35) * 80 / 88))
+
+    image_forward = pygame.image.load("Assets/dark/pgn controlls/next.png")
+    image_forward = pygame.transform.smoothscale(image_forward, (f(35), f(35) * 80 / 88))
+
+    image_fast_forward = pygame.image.load("Assets/dark/pgn controlls/last.png")
+    image_fast_forward = pygame.transform.smoothscale(image_fast_forward, (f(35), f(35) * 80 / 88))
+
+    def change_theme(theme=None):
+        Assets.WHITE = tuple(255 - x for x in Assets.WHITE[:3]) + Assets.WHITE[3:]
+        Assets.WHITE2 = tuple(255 - x for x in Assets.WHITE2[:3]) + Assets.WHITE2[3:]
+        Assets.BLACKY = tuple(255 - x for x in Assets.BLACKY[:3]) + Assets.BLACKY[3:]
+        #Assets.BLACKY1 = tuple(255 - x for x in Assets.BLACKY1[:3]) + Assets.BLACKY1[3:]
+        Assets.DARK_GREEN_TRANSPARENT = tuple(255 - x for x in Assets.DARK_GREEN_TRANSPARENT[:3]) + Assets.DARK_GREEN_TRANSPARENT[3:]
+        Assets.DARK_GREEN_TRANSPARENT1 = tuple(255 - x for x in Assets.DARK_GREEN_TRANSPARENT1[:3]) + Assets.DARK_GREEN_TRANSPARENT1[3:]
+        Assets.YELLOW_TRANSPARENT = tuple(255 - x for x in Assets.YELLOW_TRANSPARENT[:3]) + Assets.YELLOW_TRANSPARENT[3:]
+        Assets.YELLOW_TRANSPARENT1 = tuple(255 - x for x in Assets.YELLOW_TRANSPARENT1[:3]) + Assets.YELLOW_TRANSPARENT1[3:]
+        Assets.RED_TRANSPARENT = tuple(255 - x for x in Assets.RED_TRANSPARENT[:3]) + Assets.RED_TRANSPARENT[3:]
+        Assets.PURPLE_TRANSPARENT = tuple(255 - x for x in Assets.PURPLE_TRANSPARENT[:3]) + Assets.PURPLE_TRANSPARENT[3:]
+        Assets.GRAY = tuple(255 - x for x in Assets.GRAY[:3]) + Assets.GRAY[3:]
+        Assets.BLACK = tuple(255 - x for x in Assets.BLACK[:3]) + Assets.BLACK[3:]
+
+        Assets.dark_overlay.fill(Assets.BLACK)
+
+        if Assets.theme == "dark":
+            Assets.theme = "light"
+        else:
+            Assets.theme = "dark"
+            
+        Assets.image_bg = pygame.image.load(f"Assets/{Assets.theme}/backgrounds/background {Assets.theme}.png")
+        Assets.image_bg = pygame.transform.smoothscale(Assets.image_bg, (WIDTH, HEIGHT))
+
+        Assets.image_table = pygame.image.load(f"Assets/{Assets.theme}/boards/board background.png")
+        Assets.image_table = pygame.transform.smoothscale(Assets.image_table, (WIDTH, WIDTH))
+
+        Assets.image_unknown_user = pygame.image.load(f"Assets/{Assets.theme}/users/unknown user.png")
+        Assets.image_unknown_user = pygame.transform.smoothscale(Assets.image_unknown_user, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7 * 93 / 97))
+
+        Assets.image_fast_backward = pygame.image.load(f"Assets/{Assets.theme}/pgn controlls/first.png")
+        Assets.image_fast_backward = pygame.transform.smoothscale(Assets.image_fast_backward, (f(35), f(35) * 80 / 88))
+
+        Assets.image_backward = pygame.image.load(f"Assets/{Assets.theme}/pgn controlls/previous.png")
+        Assets.image_backward = pygame.transform.smoothscale(Assets.image_backward, (f(35), f(35) * 80 / 88))
+
+        Assets.image_forward = pygame.image.load(f"Assets/{Assets.theme}/pgn controlls/next.png")
+        Assets.image_forward = pygame.transform.smoothscale(Assets.image_forward, (f(35), f(35) * 80 / 88))
+
+        Assets.image_fast_forward = pygame.image.load(f"Assets/{Assets.theme}/pgn controlls/last.png")
+        Assets.image_fast_forward = pygame.transform.smoothscale(Assets.image_fast_forward, (f(35), f(35) * 80 / 88))
+
+        Assets.image_N = pygame.image.load("Assets/dark/pieces white/N.png") if Assets.theme == "dark" else pygame.image.load("Assets/light/pieces black/n.png")
+        Assets.image_N = pygame.transform.smoothscale(Assets.image_N, (f(100), f(100)))
+
+        Assets.image_settings = pygame.image.load(f"Assets/{Assets.theme}/options.png")
+        Assets.image_settings = pygame.transform.smoothscale(Assets.image_settings, (SQUARE_SIZE * 0.6, SQUARE_SIZE * 0.6 * 55 / 75))
+
+        # kings images home screen
+        Assets.image_K = pygame.image.load(f"Assets/{Assets.theme}/pieces white/K.png")
+        Assets.image_K = pygame.transform.smoothscale(Assets.image_K, (f(100), f(100)))
+
+        Assets.image_k = pygame.image.load(f"Assets/{Assets.theme}/pieces black/k.png")
+        Assets.image_k = pygame.transform.smoothscale(Assets.image_k, (f(100), f(100)))
+
+        if game.player_color == "w":
+            game.route_player = f"Assets/{Assets.theme}/pieces white/"
+            game.route_opponent = f"Assets/{Assets.theme}/pieces black/"
+        else:
+            game.route_player = f"Assets/{Assets.theme}/pieces black/"
+            game.route_opponent = f"Assets/{Assets.theme}/pieces white/"
+
+        for piece in game.pieces_player:
+            piece.image = pygame.image.load(game.route_player + piece.name + ".png")
+            piece.image = pygame.transform.smoothscale(piece.image, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7))
+
+        for piece in game.pieces_opponent:
+            piece.image = pygame.image.load(game.route_opponent + piece.name + ".png")
+            piece.image = pygame.transform.smoothscale(piece.image, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7))
+
+        for piece in game.pieces_promotion:
+            piece.image = pygame.image.load(game.route_player + piece.name + ".png")
+            piece.image = pygame.transform.smoothscale(piece.image, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7))
+
+rect_moving_square_prev = Assets.moving_square_prev.get_rect()
+rect_moving_square_curr = Assets.moving_square_prev.get_rect()
+
+rect_check_square = Assets.check_square.get_rect()
+
+rect_table = Assets.image_table.get_rect()
+
+rect_K = Assets.image_K.get_rect()
 rect_K.center = (WIDTH / 2 - f(100), HEIGHT - f(100))
 
-image_k = pygame.image.load("Assets/dark/pieces black/k.png")
-image_k = pygame.transform.smoothscale(image_k, (f(100), f(100)))
-rect_k = image_k.get_rect()
+rect_k = Assets.image_k.get_rect()
 rect_k.center = (WIDTH / 2 + f(100), HEIGHT - f(100))
 
-image_N = pygame.image.load("Assets/dark/pieces white/N.png")
-image_N = pygame.transform.smoothscale(image_N, (f(100), f(100)))
-rect_N = image_N.get_rect()
+rect_N = Assets.image_N.get_rect()
 rect_N.center = (WIDTH * 0.3, WIDTH * 0.3)
 
 rect_resign = pygame.Rect(0, 0, 1, 1)
 rect_draw = pygame.Rect(0, 0, 1, 1)
+rect_change_theme = pygame.Rect(0, 0, 1, 1)
 
-image_unknown_user = pygame.image.load("Assets/dark/users/unknown user.png")
-image_unknown_user = pygame.transform.smoothscale(image_unknown_user, (SQUARE_SIZE * 0.7, SQUARE_SIZE * 0.7 * 93 / 97))
-rect_image_player = image_unknown_user.get_rect()
-rect_image_opponent = image_unknown_user.get_rect()
+rect_image_player = Assets.image_unknown_user.get_rect()
+rect_image_opponent = Assets.image_unknown_user.get_rect()
 
-image_flag_player = pygame.image.load("Assets/shared/flags/64/unknown.png")
-image_flag_player = pygame.transform.smoothscale(image_flag_player, (f(20), f(20)))
-rect_flag_player = image_flag_player.get_rect()
+rect_flag_player = Assets.image_flag_player.get_rect()
+rect_flag_opponent = Assets.image_flag_opponent.get_rect()
 
-image_flag_opponent = pygame.image.load("Assets/shared/flags/64/unknown.png")
-image_flag_opponent = pygame.transform.smoothscale(image_flag_opponent, (f(20), f(20)))
-rect_flag_opponent = image_flag_opponent.get_rect()
+rect_settings = Assets.image_settings.get_rect()
 
-image_settings = pygame.image.load("Assets/dark/options.png")
-image_settings = pygame.transform.smoothscale(image_settings, (SQUARE_SIZE * 0.6, SQUARE_SIZE * 0.6 * 55 / 75))
-rect_settings = image_settings.get_rect()
+rect_gameover_big = Assets.image_gameover_big.get_rect(center=(WIDTH / 2, HEIGHT / 2))
+rect_gameover_small = Assets.image_gameover_small.get_rect(bottomleft=rect_gameover_big.bottomleft)
 
-image_panel = pygame.image.load("Assets/shared/home/Rectangle 28.png")
-image_cursor = pygame.image.load("Assets/shared/home/Rectangle 32.png")
-
-image_gameover_big = pygame.image.load("Assets/shared/Rectangle 34.png")
-image_gameover_big = pygame.transform.smoothscale(image_gameover_big, (WIDTH * 0.7, WIDTH * 0.7 * 650 / 1200))
-rect_gameover_big = image_gameover_big.get_rect(center=(WIDTH / 2, HEIGHT / 2))
-
-image_gameover_small = pygame.image.load("Assets/shared/Rectangle 35.jpg")
-image_gameover_small = pygame.transform.smoothscale(image_gameover_small, (WIDTH * 0.7, WIDTH * 0.7 * 300 / 1200))
-rect_gameover_small = image_gameover_small.get_rect(bottomleft=rect_gameover_big.bottomleft)
-
-image_trophy = pygame.image.load("Assets/shared/image 2.png")
-image_trophy = pygame.transform.smoothscale(image_trophy, (rect_gameover_big.size[1] - rect_gameover_small.size[1] - f(40), (rect_gameover_big.size[1] - rect_gameover_small.size[1] - f(40)) * 211 / 180))
-rect_trophy = image_trophy.get_rect()
+rect_trophy = Assets.image_trophy.get_rect()
 rect_trophy.center = (rect_gameover_big.left + f(50), (rect_gameover_big.top + rect_gameover_small.top) / 2)
 
-image_gameover_button = pygame.image.load("Assets/shared/Rectangle 36.png")
-image_gameover_button = pygame.transform.smoothscale(image_gameover_button, (rect_gameover_big.width / 2 - f(20), (rect_gameover_big.width / 2 - f(20)) * 150 / 550))
-rect_gameover_button1 = image_gameover_button.get_rect()
+rect_gameover_button1 = Assets.image_gameover_button.get_rect()
 rect_gameover_button1.center = (rect_gameover_big.left + rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2)
-rect_gameover_button2 = image_gameover_button.get_rect()
+rect_gameover_button2 = Assets.image_gameover_button.get_rect()
 rect_gameover_button2.center = (rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2)
 
-image_close_button = pygame.image.load("Assets/shared/close.png")
-image_close_button = pygame.transform.smoothscale(image_close_button, (f(10), f(10)))
-rect_close_button = image_close_button.get_rect()
+rect_close_button = Assets.image_close_button.get_rect()
 
 rect_pgn = pygame.Rect(-1, rect_image_player.bottom + f(50), WIDTH + 2, f(30))
 
-image_fast_backward = pygame.image.load("Assets/dark/pgn controlls/first.png")
-image_fast_backward = pygame.transform.smoothscale(image_fast_backward, (f(35), f(35) * 80 / 88))
-rect_fast_backward = image_fast_backward.get_rect()
-
-image_backward = pygame.image.load("Assets/dark/pgn controlls/previous.png")
-image_backward = pygame.transform.smoothscale(image_backward, (f(35), f(35) * 80 / 88))
-rect_backward = image_backward.get_rect()
-
-image_forward = pygame.image.load("Assets/dark/pgn controlls/next.png")
-image_forward = pygame.transform.smoothscale(image_forward, (f(35), f(35) * 80 / 88))
-rect_forward = image_forward.get_rect()
-
-image_fast_forward = pygame.image.load("Assets/dark/pgn controlls/last.png")
-image_fast_forward = pygame.transform.smoothscale(image_fast_forward, (f(35), f(35) * 80 / 88))
-rect_fast_forward = image_fast_forward.get_rect()
+rect_fast_backward = Assets.image_fast_backward.get_rect()
+rect_backward = Assets.image_backward.get_rect()
+rect_forward = Assets.image_forward.get_rect()
+rect_fast_forward = Assets.image_fast_forward.get_rect()
 
 piece_to_value = dict()
 for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3, 3, 5, 9, 1, 3, 3, 5, 9]):
@@ -178,6 +276,7 @@ for file, column in file_to_column.items():
     column_to_file[column] = file
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+fen_start = "rnbqkbnr/pPpppppp/p7/8/8/8/PPPP1PPP/RNBQK1NR w KQkq - 0 1"
 
 try_positions = []
 try_positions.append("rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3") # bishop pinning the knight
@@ -202,6 +301,7 @@ try_positions.append("8/8/4k3/8/3Q4/8/1Q6/3K4 w - - 0 1") # two queens vs king p
 try_positions.append("2k5/1n6/8/8/8/8/6p1/4K2R w K - 0 1") # castling through pawn check
 try_positions.append("R2Q4/5pbk/2p3p1/3b4/4p1B1/7P/1q1P1P2/4K3 w - - 0 1") # queen giving check being defended by a pinned bishop
 try_positions.append("r2k4/1P5R/8/8/8/8/8/3K4 w - - 0 1") # promotion while capturing into a checkmate (hell yeah)
+try_positions.append("rnbqkbnr/pPpppppp/p7/8/8/8/PPPP1PPP/RNBQK1NR w KQkq - 0 1") # promotion UI test
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -239,11 +339,11 @@ class Home:
                         self.player_color = "b"
                         return
             
-            screen.fill(BLACKY)
-            screen.blit(image_bg, (0, 0))
+            screen.fill(Assets.BLACKY)
+            screen.blit(Assets.image_bg, (0, 0))
 
-            screen.blit(image_K, rect_K)
-            screen.blit(image_k, rect_k)
+            screen.blit(Assets.image_K, rect_K)
+            screen.blit(Assets.image_k, rect_k)
 
             self.slider1.draw()
             self.slider1.calc_based_on_cursor(self, 1)
@@ -334,8 +434,12 @@ class Game:
         rect_table.topleft = (self.TABLE_X, self.TABLE_Y)
 
         # assuming player is white
-        self.route_player = "Assets/dark/pieces white/"
-        self.route_opponent = "Assets/dark/pieces black/"
+        if self.player_color == "w":
+            self.route_player = f"Assets/{Assets.theme}/pieces white/"
+            self.route_opponent = f"Assets/{Assets.theme}/pieces black/"
+        else:
+            self.route_player = f"Assets/{Assets.theme}/pieces black/"
+            self.route_opponent = f"Assets/{Assets.theme}/pieces white/"
 
         # SETTING PIECES UP
         self.pieces_player = pygame.sprite.Group()
@@ -358,7 +462,6 @@ class Game:
         rect_fast_forward.topright = (rect_pgn.right - f(10), rect_pgn.bottom + f(10))
         rect_forward.topright = (rect_fast_forward.left - f(10), rect_pgn.bottom + f(10))
 
-
         self.clock_player = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_player.top, True)
         self.clock_opponent = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top, False)
 
@@ -370,9 +473,10 @@ class Game:
         if self.player_color == "b":
             self.player_to_move = "o"
             (self.names_player, self.names_opponent) = (self.names_opponent, self.names_player)
-            (self.route_player, self.route_opponent) = (self.route_opponent, self.route_player)
         
         self.best_move_stockfish = None
+
+        # used only for testing premoves, doesnt affect the game logic
         self.move_cooldown = 2
 
         self.stockfish_active = True
@@ -384,7 +488,7 @@ class Game:
 
         self.stockfish = Stockfish(path="stockfish/stockfish-windows-x86-64-avx2.exe")
         self.stockfish.set_skill_level(self.strength)
-        self.stockfish_elo = 135 * self.strength + 800 # estimate
+        self.stockfish_elo = 135 * self.strength + 800  # linear estimate
         self.stockfish.set_fen_position(fen_start)
         self.thread = None
         if self.stockfish_active:
@@ -396,14 +500,15 @@ class Game:
     def run(self):
         while 1:
             # rendering "behind" the gameplay
-            screen.fill(BLACKY)
+            screen.fill(Assets.BLACKY)
             if self.SETTINGS_ANIMATION_RUNNING or self.IN_SETTINGS:
-                screen.blit(image_N, rect_N)
+                screen.blit(Assets.image_N, rect_N)
             rect_resign = render_text("Resign", WIDTH * 0.3, rect_N.bottom + f(100), int(f(25)))
             rect_draw = render_text("Offer draw", WIDTH * 0.3, rect_N.bottom + f(200), int(f(25)))
+            rect_change_theme = render_text("Switch theme", WIDTH * 0.3, rect_N.bottom + f(300), int(f(25)))
 
-            screen.blit(image_bg, (self.SCREEN_OFFSET_X, self.SCREEN_OFFSET_Y))
-            screen.blit(image_table, rect_table)
+            screen.blit(Assets.image_bg, (self.SCREEN_OFFSET_X, self.SCREEN_OFFSET_Y))
+            screen.blit(Assets.image_table, rect_table)
 
             if self.SETTINGS_ANIMATION_RUNNING:
                 self.reset_premoves()
@@ -424,7 +529,7 @@ class Game:
                 rect_backward.x += self.SETTINGS_ANIMATION_SPEED
                 rect_forward.x += self.SETTINGS_ANIMATION_SPEED
                 rect_fast_forward.x += self.SETTINGS_ANIMATION_SPEED
-
+                
                 for piece in self.pieces_player:
                     piece.update_rect_position()
                     piece.rect.center = piece.calc_position_screen(piece.row, piece.column)
@@ -480,6 +585,9 @@ class Game:
                     
                     if self.IN_SETTINGS and rect_draw.collidepoint(event.pos):
                         self.draw = True
+                    
+                    if self.IN_SETTINGS and rect_change_theme.collidepoint(event.pos):
+                        Assets.change_theme()
                     
                     # handle parallel universe
                     if rect_fast_backward.collidepoint(event.pos):
@@ -544,7 +652,7 @@ class Game:
                     for piece in self.pieces_promotion:
                         piece.handle_event_promotion(event)
             
-            if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None and self.move_cooldown <= 0:
+            if self.player_to_move == "o" and self.stockfish_active and self.is_move_ready() and self.best_move_stockfish is not None:
                 if self.IN_PARALLEL_UNIVERSE:
                     self.convert_fen(self.fen[-1])
                 self.move_index = len(self.fen) - 1
@@ -561,8 +669,7 @@ class Game:
                         piece.holding = False
                         piece.unselecting_downclick = False
                         piece.make_move(square)
-                        if piece.name in ["P", "p"] and (piece.row == 1 or piece.row == 6):
-                            print(self.promotion_square)
+                        if piece.name in ["P", "p"] and (piece.row == 0 or piece.row == 7):
                             piece.handle_event_promotion(None, premoved=True)
                         self.premoves.pop(0)                        
                         self.post_move_processing()
@@ -573,14 +680,14 @@ class Game:
             if self.player_to_move == "o":
                 self.move_cooldown -= dt
 
-            screen.blit(image_settings, rect_settings)
+            screen.blit(Assets.image_settings, rect_settings)
 
             if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y and not self.IN_PARALLEL_UNIVERSE:
-                screen.blit(moving_square_prev, rect_moving_square_prev)
-                screen.blit(moving_square_curr, rect_moving_square_curr)
+                screen.blit(Assets.moving_square_prev, rect_moving_square_prev)
+                screen.blit(Assets.moving_square_curr, rect_moving_square_curr)
             
             if rect_check_square.center[0] >= self.SCREEN_OFFSET_X and rect_check_square.center[1] >= self.SCREEN_OFFSET_Y and not self.IN_PARALLEL_UNIVERSE:
-                screen.blit(check_square, rect_check_square)
+                screen.blit(Assets.check_square, rect_check_square)
 
             self.pieces_player.draw(screen)
             self.pieces_opponent.draw(screen)
@@ -591,21 +698,21 @@ class Game:
                 screen.blit(piece.image, piece.rect)
 
             # rendering off table stuff
-            screen.blit(image_unknown_user, rect_image_player)
-            screen.blit(image_unknown_user, rect_image_opponent)
+            screen.blit(Assets.image_unknown_user, rect_image_player)
+            screen.blit(Assets.image_unknown_user, rect_image_opponent)
 
-            render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
-            render_text("(3500)", self.SCREEN_OFFSET_X + f(138), rect_image_player.top + f(1), int(f(14)), True, GRAY)
-            render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
-            render_text(f"({self.stockfish_elo})", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
+            render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), top_left=True)
+            render_text("(3500)", self.SCREEN_OFFSET_X + f(138), rect_image_player.top + f(1), int(f(14)), top_left=True, color=Assets.GRAY)
+            render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), top_left=True)
+            render_text(f"({self.stockfish_elo})", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), top_left=True, color=Assets.GRAY)
 
-            screen.blit(image_flag_player, rect_flag_player)
-            screen.blit(image_flag_opponent, rect_flag_opponent)
+            screen.blit(Assets.image_flag_player, rect_flag_player)
+            screen.blit(Assets.image_flag_opponent, rect_flag_opponent)
 
             if self.advantage > 0:
-                render_text(f"+{self.advantage}", self.advantage_x, rect_image_player.top + f(24), int(f(10)), True)
+                render_text(f"+{self.advantage}", self.advantage_x, rect_image_player.top + f(24), int(f(10)), top_left=True)
             elif self.advantage < 0:
-                render_text(f"+{-self.advantage}", self.advantage_x, rect_image_opponent.top + f(24), int(f(10)), True)
+                render_text(f"+{-self.advantage}", self.advantage_x, rect_image_opponent.top + f(24), int(f(10)), top_left=True)
 
             self.clock_player.draw()
             self.clock_opponent.draw()
@@ -615,22 +722,22 @@ class Game:
 
             # render premoving squares
             for (piece, center) in self.premoves:
-                rect_premove_square = premove_square.get_rect()
+                rect_premove_square = Assets.premove_square.get_rect()
                 rect_premove_square.center = (center[0] + self.SCREEN_OFFSET_X, center[1])
-                screen.blit(premove_square, rect_premove_square)
+                screen.blit(Assets.premove_square, rect_premove_square)
 
             if self.promoting:
                 #self.promote_random_piece()
-                screen.blit(dark_overlay, (self.SCREEN_OFFSET_X, self.TABLE_Y))
+                screen.blit(Assets.dark_overlay, (self.SCREEN_OFFSET_X, self.TABLE_Y))
                 self.pieces_promotion.draw(screen)
 
             if not (self.SETTINGS_ANIMATION_RUNNING or self.IN_SETTINGS):
-                pygame.draw.rect(screen, WHITE2, rect_pgn, width=1)
+                pygame.draw.rect(screen, Assets.WHITE2, rect_pgn, width=1)
                 render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
-                screen.blit(image_fast_backward, rect_fast_backward)
-                screen.blit(image_backward, rect_backward)
-                screen.blit(image_forward, rect_forward)
-                screen.blit(image_fast_forward, rect_fast_forward)
+                screen.blit(Assets.image_fast_backward, rect_fast_backward)
+                screen.blit(Assets.image_backward, rect_backward)
+                screen.blit(Assets.image_forward, rect_forward)
+                screen.blit(Assets.image_fast_forward, rect_fast_forward)
 
             # these situations have to be checked every frame, whereas set_game_reason() gets called only after a move
             if self.clock_player.seconds_left <= 0:
@@ -673,13 +780,15 @@ class Game:
         pygame.time.wait(100)
         while 1:
             # rendering "behind" the gameplay
-            screen.fill(BLACKY)
+            screen.fill(Assets.BLACKY)
             if self.SETTINGS_ANIMATION_RUNNING or self.IN_SETTINGS:
-                screen.blit(image_N, rect_N)
+                screen.blit(Assets.image_N, rect_N)
             rect_resign = render_text("Rematch", WIDTH * 0.3, rect_N.bottom + f(100), int(f(25))) # now its rect_rematch
             rect_draw = render_text("Home", WIDTH * 0.3, rect_N.bottom + f(200), int(f(25))) # rect_home
-            screen.blit(image_bg, (self.SCREEN_OFFSET_X, self.SCREEN_OFFSET_Y))
-            screen.blit(image_table, rect_table)
+            rect_change_theme = render_text("Switch theme", WIDTH * 0.3, rect_N.bottom + f(300), int(f(25))) # rect_home
+
+            screen.blit(Assets.image_bg, (self.SCREEN_OFFSET_X, self.SCREEN_OFFSET_Y))
+            screen.blit(Assets.image_table, rect_table)
 
             if self.SETTINGS_ANIMATION_RUNNING:
                 self.reset_premoves()
@@ -750,6 +859,9 @@ class Game:
                         Game.back_to_home = True
                         return
                     
+                    if rect_change_theme.collidepoint(event.pos):
+                        Assets.change_theme()
+                    
                     clickable_area = rect_close_button.inflate(f(10), f(10))
                     if not closed_dialog and clickable_area.collidepoint(event.pos):
                         closed_dialog = True
@@ -808,7 +920,7 @@ class Game:
             
             clock.tick(60)
 
-            screen.blit(image_settings, rect_settings)
+            screen.blit(Assets.image_settings, rect_settings)
 
             for piece in self.captured_pieces_player:
                 screen.blit(piece.image, piece.rect)
@@ -816,60 +928,60 @@ class Game:
                 screen.blit(piece.image, piece.rect)
 
             if self.advantage > 0:
-                render_text(f"+{self.advantage}", self.advantage_x, rect_image_player.top + f(24), int(f(10)), True)
+                render_text(f"+{self.advantage}", self.advantage_x, rect_image_player.top + f(24), int(f(10)), top_left=True)
             elif self.advantage < 0:
-                render_text(f"+{-self.advantage}", self.advantage_x, rect_image_opponent.top + f(24), int(f(10)), True)
+                render_text(f"+{-self.advantage}", self.advantage_x, rect_image_opponent.top + f(24), int(f(10)), top_left=True)
 
             if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y and not self.IN_PARALLEL_UNIVERSE:
-                screen.blit(moving_square_prev, rect_moving_square_prev)
-                screen.blit(moving_square_curr, rect_moving_square_curr)
+                screen.blit(Assets.moving_square_prev, rect_moving_square_prev)
+                screen.blit(Assets.moving_square_curr, rect_moving_square_curr)
 
             self.pieces_player.draw(screen)
             self.pieces_opponent.draw(screen)
 
             # rendering off table stuff
-            screen.blit(image_unknown_user, rect_image_player)
-            screen.blit(image_unknown_user, rect_image_opponent)
+            screen.blit(Assets.image_unknown_user, rect_image_player)
+            screen.blit(Assets.image_unknown_user, rect_image_opponent)
 
-            render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), True)
-            render_text("(3500)", self.SCREEN_OFFSET_X + f(138), rect_image_player.top + f(1), int(f(14)), True, GRAY)
-            render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), True)
-            render_text(f"({self.stockfish_elo})", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), True, GRAY)
+            render_text("Username", rect_image_player.right + f(15), rect_image_player.top + f(1), int(f(14)), top_left=True)
+            render_text("(3500)", self.SCREEN_OFFSET_X + f(138), rect_image_player.top + f(1), int(f(14)), top_left=True, color=Assets.GRAY)
+            render_text("Computer", rect_image_opponent.right + f(15), rect_image_opponent.top + f(1), int(f(14)), top_left=True)
+            render_text(f"({self.stockfish_elo})", self.SCREEN_OFFSET_X  + f(138), rect_image_opponent.top + f(1), int(f(14)), top_left=True, color=Assets.GRAY)
 
-            screen.blit(image_flag_player, rect_flag_player)
-            screen.blit(image_flag_opponent, rect_flag_opponent)
+            screen.blit(Assets.image_flag_player, rect_flag_player)
+            screen.blit(Assets.image_flag_opponent, rect_flag_opponent)
 
             self.clock_player.draw()
             self.clock_opponent.draw()
 
             if not closed_dialog:
-                screen.blit(image_gameover_big, rect_gameover_big)
-                screen.blit(image_gameover_small, rect_gameover_small)
+                screen.blit(Assets.image_gameover_big, rect_gameover_big)
+                screen.blit(Assets.image_gameover_small, rect_gameover_small)
 
                 if self.winner is None:
                     render_text("Draw", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
                 else:
                     render_text(f"{self.winner} won!", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
-                render_text(f"by {self.game_end_reason}", WIDTH / 2, rect_gameover_big.top + f(55), int(f(12)), color=GRAY)
+                render_text(f"by {self.game_end_reason}", WIDTH / 2, rect_gameover_big.top + f(55), int(f(12)), color=Assets.GRAY)
 
                 if self.winner == "You":
-                    screen.blit(image_trophy, rect_trophy)
+                    screen.blit(Assets.image_trophy, rect_trophy)
                 
-                screen.blit(image_gameover_button, rect_gameover_button1)
+                screen.blit(Assets.image_gameover_button, rect_gameover_button1)
                 render_text("Rematch", rect_gameover_big.left + rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
 
-                screen.blit(image_gameover_button, rect_gameover_button2)
+                screen.blit(Assets.image_gameover_button, rect_gameover_button2)
                 render_text("Home", rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
 
-                screen.blit(image_close_button, rect_close_button)
+                screen.blit(Assets.image_close_button, rect_close_button)
 
             if not (self.SETTINGS_ANIMATION_RUNNING or self.IN_SETTINGS):
-                pygame.draw.rect(screen, WHITE2, rect_pgn, width=1)
+                pygame.draw.rect(screen, Assets.WHITE2, rect_pgn, width=1)
                 render_text(self.algebraic_text, rect_pgn.right, rect_pgn.y + rect_pgn.height / 2, int(f(12)), right=True)
-                screen.blit(image_fast_backward, rect_fast_backward)
-                screen.blit(image_backward, rect_backward)
-                screen.blit(image_forward, rect_forward)
-                screen.blit(image_fast_forward, rect_fast_forward)
+                screen.blit(Assets.image_fast_backward, rect_fast_backward)
+                screen.blit(Assets.image_backward, rect_backward)
+                screen.blit(Assets.image_forward, rect_forward)
+                screen.blit(Assets.image_fast_forward, rect_fast_forward)
 
             pygame.display.flip()
 
@@ -1146,7 +1258,7 @@ class Game:
         with self.lock:
             wtime = self.clock_player.seconds_left * 1000 if self.player_color == "w" else self.clock_opponent.seconds_left * 1000
             btime = self.clock_player.seconds_left * 1000 if self.player_color == "b" else self.clock_opponent.seconds_left * 1000
-            self.best_move_stockfish = self.stockfish.get_best_move(wtime=min(30*1000, wtime), btime=min(30*1000, btime))
+            self.best_move_stockfish = self.stockfish.get_best_move(wtime=min(45*1000, wtime), btime=min(45*1000, btime))
 
     def get_move_in_background(self):
         self.best_move_stockfish = None
@@ -1531,12 +1643,12 @@ class Slider():
         self.y = y
         self.height = f(15)
         self.width_panel = WIDTH * 3 / 4
-        self.image_panel = pygame.transform.smoothscale(image_panel, (self.width_panel, self.height))
+        self.image_panel = pygame.transform.smoothscale(Assets.image_panel, (self.width_panel, self.height))
         self.rect_panel = self.image_panel.get_rect()
         self.rect_panel.center = (int(WIDTH / 2), y)
 
         self.width_cursor = f(30)
-        self.image_cursor = pygame.transform.smoothscale(image_cursor, (self.width_cursor, self.height))
+        self.image_cursor = pygame.transform.smoothscale(Assets.image_cursor, (self.width_cursor, self.height))
         self.rect_cursor = self.image_cursor.get_rect()
         self.rect_cursor.x = self.rect_panel.x
         self.rect_cursor.y = self.rect_panel.y
@@ -2034,7 +2146,7 @@ class Piece(pygame.sprite.Sprite):
     def display_available_squares(self):
         # and also mark selected square
         marked_square = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-        marked_square.fill(DARK_GREEN_TRANSPARENT)
+        marked_square.fill(Assets.DARK_GREEN_TRANSPARENT)
 
         rect_marked_square = marked_square.get_rect()
         (x, y) = self.calc_position_screen(self.row, self.column)
@@ -2047,13 +2159,13 @@ class Piece(pygame.sprite.Sprite):
             # if its not empty square, then player is capturing
             # marking it green
             if self.game.TABLE_MATRIX[row][column] != '.':
-                marked_square.fill(DARK_GREEN_TRANSPARENT1)
+                marked_square.fill(Assets.DARK_GREEN_TRANSPARENT1)
                 (x, y) = self.calc_position_screen(row, column)
                 rect_marked_square.center = (x, y)
                 screen.blit(marked_square, rect_marked_square)
             # else display a dot
             else:
-                pygame.draw.circle(screen, BLACKY1, (x, y), f(7), 0)
+                pygame.draw.circle(screen, Assets.BLACKY1, (x, y), f(7), 0)
     
     def available_move(self, square=None):
         # catches the current (x, y) coordinates of a piece while being dragged accross the board and checks if the chosen square is available
@@ -2262,8 +2374,7 @@ class Piece(pygame.sprite.Sprite):
                 for name in names_list:
                     self.game.pieces_promotion.add(Piece(self.game, name, pygame.image.load(self.game.route_player + f"{name}.png"), row, self.column, self.names))
                     row += 1
-                # dont actually make a move, game might end before player chooses a piece
-                (self.row, self.column) = (prev_row, prev_column)
+
             if self.row == 7:
                 self.game.promotion_square = (self.row, self.column)
                 self.game.promoting = not in_premoves
@@ -2273,15 +2384,25 @@ class Piece(pygame.sprite.Sprite):
                 for name in names_list:
                     self.game.pieces_promotion.add(Piece(self.game, name, pygame.image.load(self.game.route_opponent + f"{name}.png"), row, self.column, self.names))
                     row -= 1
-                # dont actually make a move, game might end before player chooses a piece
-                (self.row, self.column) = (prev_row, prev_column)
 
     def make_premove(self):
         (row, column) = self.calc_position_matrix(self.rect.center)
-        if self.game.TABLE_MATRIX[row][column] != '.':
+        piece_below = None
+        for piece in self.game.pieces_player:
+            if piece is not self and piece.calc_position_matrix(piece.rect.center) == (row, column):
+                piece_below = piece
+                break
+        
+        for piece in self.game.pieces_opponent:
+            if piece is not self and piece.calc_position_matrix(piece.rect.center) == (row, column):
+                piece_below = piece
+                break
+
+        if piece_below is not None:
             # render piece in the back off screen
-            self.game.matrix_to_piece[(row, column)].rect.center = (-SQUARE_SIZE, -SQUARE_SIZE)
-            self.game.matrix_to_piece[(row, column)].rect_square.center = (-SQUARE_SIZE, -SQUARE_SIZE)
+            piece_below.rect.center = (-SQUARE_SIZE, -SQUARE_SIZE)
+            piece_below.rect_square.center = (-SQUARE_SIZE, -SQUARE_SIZE)
+
         self.rect.center = self.calc_position_screen(row, column)
         self.rect_square.center = self.rect.center            
         self.game.premoves.append((self, self.rect.center))
@@ -2581,13 +2702,13 @@ class Clock():
         self.seconds_left = self.start_seconds
         self.rect = pygame.Rect(x, y, WIDTH - x - f(10), SQUARE_SIZE * 0.7)
         self.low_time_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
-        self.low_time_surface.fill(RED_TRANSPARENT)
+        self.low_time_surface.fill(Assets.RED_TRANSPARENT)
         self.locked = True
         self.player = player
     def draw(self):
-        render_color = WHITE
+        render_color = Assets.WHITE
         if self.locked:
-            render_color = GRAY
+            render_color = Assets.GRAY
         minutes = int(self.seconds_left // 60)
         seconds = self.seconds_left % 60
         if self.seconds_left > 10:
