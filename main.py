@@ -144,6 +144,9 @@ class Assets:
     image_fast_forward = pygame.image.load("Assets/dark/pgn controlls/last.png")
     image_fast_forward = pygame.transform.smoothscale(image_fast_forward, (f(35), f(35) * 80 / 88))
 
+    image_moon = pygame.image.load("Assets/shared/moon light.png")
+    image_moon = pygame.transform.smoothscale(image_moon, (f(40), f(40)))
+
     def change_theme(theme=None):
         Assets.WHITE = tuple(255 - x for x in Assets.WHITE[:3]) + Assets.WHITE[3:]
         Assets.WHITE2 = tuple(255 - x for x in Assets.WHITE2[:3]) + Assets.WHITE2[3:]
@@ -159,6 +162,9 @@ class Assets:
         Assets.BLACK = tuple(255 - x for x in Assets.BLACK[:3]) + Assets.BLACK[3:]
 
         Assets.dark_overlay.fill(Assets.BLACK)
+
+        Assets.image_moon = pygame.image.load(f"Assets/shared/moon {Assets.theme}.png")
+        Assets.image_moon = pygame.transform.smoothscale(Assets.image_moon, (f(40), f(40)))
 
         if Assets.theme == "dark":
             Assets.theme = "light"
@@ -265,6 +271,8 @@ rect_fast_backward = Assets.image_fast_backward.get_rect()
 rect_backward = Assets.image_backward.get_rect()
 rect_forward = Assets.image_forward.get_rect()
 rect_fast_forward = Assets.image_fast_forward.get_rect()
+
+rect_moon = Assets.image_moon.get_rect()
 
 piece_to_value = dict()
 for name, value in zip(["P", "N", "B", "R", "Q", "p", "n", "b", "r", "q"], [1, 3, 3, 5, 9, 1, 3, 3, 5, 9]):
@@ -461,6 +469,8 @@ class Game:
         rect_backward.topleft = (rect_fast_backward.right + f(10), rect_pgn.bottom + f(10))
         rect_fast_forward.topright = (rect_pgn.right - f(10), rect_pgn.bottom + f(10))
         rect_forward.topright = (rect_fast_forward.left - f(10), rect_pgn.bottom + f(10))
+        rect_moon.bottom = rect_settings.bottom + f(10)
+        rect_moon.right = WIDTH - f(30)
 
         self.clock_player = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_player.top, True)
         self.clock_opponent = Clock(self, self.SCREEN_OFFSET_X + WIDTH - 2 * SQUARE_SIZE - f(20), rect_image_opponent.top, False)
@@ -529,6 +539,7 @@ class Game:
                 rect_backward.x += self.SETTINGS_ANIMATION_SPEED
                 rect_forward.x += self.SETTINGS_ANIMATION_SPEED
                 rect_fast_forward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_moon.x += self.SETTINGS_ANIMATION_SPEED
                 
                 for piece in self.pieces_player:
                     piece.update_rect_position()
@@ -586,7 +597,8 @@ class Game:
                     if self.IN_SETTINGS and rect_draw.collidepoint(event.pos):
                         self.draw = True
                     
-                    if self.IN_SETTINGS and rect_change_theme.collidepoint(event.pos):
+                    clickable_area = rect_moon.inflate((f(10), f(10)))
+                    if (self.IN_SETTINGS and rect_change_theme.collidepoint(event.pos)) or clickable_area.collidepoint(event.pos):
                         Assets.change_theme()
                     
                     # handle parallel universe
@@ -681,6 +693,7 @@ class Game:
                 self.move_cooldown -= dt
 
             screen.blit(Assets.image_settings, rect_settings)
+            screen.blit(Assets.image_moon, rect_moon)
 
             if rect_moving_square_prev.center[0] >= self.SCREEN_OFFSET_X and rect_moving_square_prev.center[1] >= self.SCREEN_OFFSET_Y and not self.IN_PARALLEL_UNIVERSE:
                 screen.blit(Assets.moving_square_prev, rect_moving_square_prev)
@@ -809,6 +822,7 @@ class Game:
                 rect_backward.x += self.SETTINGS_ANIMATION_SPEED
                 rect_forward.x += self.SETTINGS_ANIMATION_SPEED
                 rect_fast_forward.x += self.SETTINGS_ANIMATION_SPEED
+                rect_moon.x += self.SETTINGS_ANIMATION_SPEED
 
                 for piece in self.pieces_player:
                     piece.update_rect_position()
@@ -859,7 +873,8 @@ class Game:
                         Game.back_to_home = True
                         return
                     
-                    if rect_change_theme.collidepoint(event.pos):
+                    clickable_area = rect_moon.inflate((f(10), f(10)))
+                    if (self.IN_SETTINGS and rect_change_theme.collidepoint(event.pos)) or clickable_area.collidepoint(event.pos):
                         Assets.change_theme()
                     
                     clickable_area = rect_close_button.inflate(f(10), f(10))
@@ -921,6 +936,7 @@ class Game:
             clock.tick(60)
 
             screen.blit(Assets.image_settings, rect_settings)
+            screen.blit(Assets.image_moon, rect_moon)
 
             for piece in self.captured_pieces_player:
                 screen.blit(piece.image, piece.rect)
@@ -961,17 +977,17 @@ class Game:
                 if self.winner is None:
                     render_text("Draw", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
                 else:
-                    render_text(f"{self.winner} won!", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)))
+                    render_text(f"{self.winner} won!", WIDTH / 2, rect_gameover_big.top + f(25), int(f(23)), color=(255, 255, 255))
                 render_text(f"by {self.game_end_reason}", WIDTH / 2, rect_gameover_big.top + f(55), int(f(12)), color=Assets.GRAY)
 
                 if self.winner == "You":
                     screen.blit(Assets.image_trophy, rect_trophy)
                 
                 screen.blit(Assets.image_gameover_button, rect_gameover_button1)
-                render_text("Rematch", rect_gameover_big.left + rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
+                render_text("Rematch", rect_gameover_big.left + rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)), color=(255, 255, 255))
 
                 screen.blit(Assets.image_gameover_button, rect_gameover_button2)
-                render_text("Home", rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)))
+                render_text("Home", rect_gameover_big.right - rect_gameover_big.width / 4, (rect_gameover_small.top + rect_gameover_small.bottom) / 2, int(f(16)), color=(255, 255, 255))
 
                 screen.blit(Assets.image_close_button, rect_close_button)
 
@@ -2702,7 +2718,7 @@ class Clock():
         self.seconds_left = self.start_seconds
         self.rect = pygame.Rect(x, y, WIDTH - x - f(10), SQUARE_SIZE * 0.7)
         self.low_time_surface = pygame.Surface((self.rect.width, self.rect.height), pygame.SRCALPHA)
-        self.low_time_surface.fill(Assets.RED_TRANSPARENT)
+        self.low_time_surface.fill((255, 0, 0, 50))
         self.locked = True
         self.player = player
     def draw(self):
