@@ -7,6 +7,7 @@ import threading
 from stockfish import Stockfish
 
 pygame.init()
+pygame.mixer.init()
 
 # aspect ratio 9 : 19.5
 WIDTH = 450
@@ -23,6 +24,12 @@ clock = pygame.time.Clock()
 available_minutes = [0.25, 0.5, 1, 2, 3, 5, 10, 20, 30, 60, 120, 180]
 available_increments = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 60]
 available_strengths = range(1, 21)
+
+piece_move = pygame.mixer.Sound("Assets/sounds/piecemove.wav")
+piece_capture = pygame.mixer.Sound("Assets/sounds/piececapture.wav")
+piece_capture.set_volume(0.6)
+game_start = pygame.mixer.Sound("Assets/sounds/gamestart.wav")
+game_start.set_volume(0.25)
 
 SQUARE_SIZE = WIDTH / 8
 
@@ -284,7 +291,6 @@ for file, column in file_to_column.items():
     column_to_file[column] = file
 
 fen_start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-fen_start = "rnbqkbnr/pPpppppp/p7/8/8/8/PPPP1PPP/RNBQK1NR w KQkq - 0 1"
 
 try_positions = []
 try_positions.append("rnbqk1nr/pppp1ppp/4p3/8/1b6/2NP4/PPP1PPPP/R1BQKBNR w KQkq - 1 3") # bishop pinning the knight
@@ -791,6 +797,7 @@ class Game:
         self.reset_premoves()
         # -------------------------------------------------------------------------------------------------------------------
         pygame.time.wait(100)
+        game_start.play()
         while 1:
             # rendering "behind" the gameplay
             screen.fill(Assets.BLACKY)
@@ -1219,6 +1226,7 @@ class Game:
     def post_move_processing(self):
         if self.promoting:
             return
+        piece_move.play()
         # next player
         if self.player_to_move == "p":
             self.player_to_move = "o"
@@ -2291,6 +2299,7 @@ class Piece(pygame.sprite.Sprite):
         # check if it was capture
         if self.game.TABLE_MATRIX[self.row][self.column] != '.': # if its available move and not empty square -> its capture
             
+            piece_capture.play()
             captured_piece = self.game.matrix_to_piece[((self.row, self.column))]
             self.game.curr_algebraic += "x"
             self.game.halfmoves = 0
@@ -2754,6 +2763,7 @@ while 1:
 
     pygame.time.wait(100)
     game = Game(home)
+    game_start.play()
     game.run()
 
     # tracks garbage collection, doesnt affect the game logic
