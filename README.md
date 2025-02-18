@@ -7,7 +7,6 @@ This is a simple chess game built using Pygame, where you can play against the S
 1. Clone the repository:
     ```bash
     git clone https://https://github.com/Danle33/Chess-app-offline.git
-    cd your-repo
     ```
 2. Install dependencies from `requirements.txt`:
     ```bash
