@@ -9,11 +9,18 @@ from stockfish import Stockfish
 pygame.init()
 pygame.mixer.init()
 
-# aspect ratio 9 : 19.5
-WIDTH = 450
-HEIGHT = 975
+# Get the user's screen size
+info = pygame.display.Info()
+max_width, max_height = info.current_w, info.current_h
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
+HEIGHT = max_height - 100
+WIDTH = HEIGHT * 9 / 19.5
+
+# aspect ratio 9 : 19.5
+'''WIDTH = 450
+HEIGHT = 975'''
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Offline Chess")
 
 # pygame clock, handles fps
