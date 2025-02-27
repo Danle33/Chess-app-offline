@@ -2744,7 +2744,7 @@ class Clock():
         minutes = int(self.seconds_left // 60)
         seconds = self.seconds_left % 60
         if self.seconds_left > 10:
-            pygame.draw.rect(screen, render_color, self.rect, width=max(1, f(1)))
+            pygame.draw.rect(screen, render_color, self.rect, width=1)
             seconds = int(seconds)
             render_text(f"{minutes:02}:{seconds:02}", self.rect.center[0], self.rect.center[1], int(f(25)), color=render_color)
         else:
